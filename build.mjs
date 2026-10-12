@@ -4,7 +4,7 @@ import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } fro
 
 mkdirSync("dist", { recursive: true });
 await build({
-  entryPoints: { background: "src/background.ts", content: "src/content.ts", panel: "src/panel/main.ts" },
+  entryPoints: { background: "src/background.ts", content: "src/content.ts", panel: "src/panel/main.ts", guide: "src/guide.ts" },
   outdir: "dist", bundle: true, format: "esm", target: "chrome116", sourcemap: "inline", logLevel: "warning",
 });
 // content scripts can't be ES modules: rebuild that one as a plain script

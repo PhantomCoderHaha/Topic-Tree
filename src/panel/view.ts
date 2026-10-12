@@ -90,3 +90,10 @@ export function fuzzy(query: string, text: string): number {
   }
   return i === q.length ? score : -1;
 }
+
+/** SVG path for a graph edge: straight within a lane, a curve where a tangent forks or merges. */
+export function edgePath(x1: number, y1: number, x2: number, y2: number, kind: "line" | "fork" | "merge", row: number): string {
+  if (x1 === x2) return `M${x1} ${y1}V${y2}`;
+  if (kind === "fork") return `M${x1} ${y1}C${x1} ${y1 + row * 0.7} ${x2} ${y1 + row * 0.3} ${x2} ${y1 + row}V${y2}`;
+  return `M${x1} ${y1}V${y2 - row}C${x1} ${y2 - row * 0.3} ${x2} ${y2 - row * 0.7} ${x2} ${y2}`;
+}

@@ -21,6 +21,27 @@
   .card { background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin: 12px 0; }
   .ctl { display:inline-grid; place-items:center; width:26px; height:24px; border:1px solid var(--line); border-radius:5px; color:var(--dim); }
   code { font: 13px Consolas, monospace; color: var(--dim); }
+  /* worked example */
+  .scene { display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; padding: 22px 0;
+           border-bottom: 1px solid var(--line); }
+  .scene h3 { margin: 0 0 6px; font-size: 16px; }
+  .scene p { margin: 6px 0; }
+  .scene .keys { color: var(--fg); }
+  @media (max-width: 760px) { .scene { grid-template-columns: 1fr; } }
+  .mock { background: #151515; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 12.5px; }
+  .mock-head { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .mock-head .rec { width: 7px; height: 7px; border-radius: 50%; background: #ff5f57; flex: none; }
+  .mock-head .sub { color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+  .mock-drift { margin: 7px 8px 0; padding: 6px 8px; border-radius: 5px; background: #2a2316; border: 1px solid #4a3c1c;
+                color: #f3d9a4; font-size: 12px; white-space: pre-wrap; }
+  .mock-graph { position: relative; padding: 6px 0 8px; }
+  .mock-graph svg { position: absolute; left: 0; top: 6px; overflow: visible; }
+  .mock-row { height: 24px; display: flex; align-items: center; gap: 4px; padding-right: 8px; white-space: nowrap; overflow: hidden;
+              border-left: 2px solid transparent; }
+  .mock-row.new { background: rgba(120,182,255,.08); }
+  .mock-row.here { border-left-color: var(--accent); }
+  .mock-row .dim { color: var(--dim); }
+  .mock-row .topic { font-size: 10.5px; color: var(--dim); border: 1px solid var(--line); padding: 0 5px; border-radius: 9px; }
 </style>
 </head>
 <body>
@@ -36,6 +57,10 @@
     <li><b>Done with the side question?</b> Press <kbd>m</kbd> to return to your main branch. The tangent folds away into one line.</li>
     <li><b>Forgot to mark it?</b> In the tree press <kbd>v</kbd>, move with <kbd>j</kbd>/<kbd>k</kbd> over the pages that were a detour, then press <kbd>t</kbd>.</li>
   </ol>
+
+  <h2>A worked example</h2>
+  <p class="dim">One research session, step by step. The right side is exactly what the panel shows; <span style="background:rgba(120,182,255,.12);padding:0 4px;border-radius:3px">tinted rows</span> are new in that step, and the blue edge marks where you are.</p>
+  <div id="example"></div>
 
   <h2>Without leaving the page</h2>
   <div class="card">Press <kbd>Ctrl+Shift+Y</kbd>, then one key:
@@ -87,5 +112,6 @@
   <p>Only on this computer. Each session is saved to <code>%LOCALAPPDATA%\TopicTree\sessions\</code> as <code>&lt;session&gt;.jsonl</code> (every event) and <code>&lt;session&gt;.tree.json</code> (the tree), so you can analyse it later. Nothing is sent anywhere.</p>
   <p class="dim">The floating card can't appear on browser pages like the New Tab page or settings. Open a website first.</p>
 </main>
+<script src="guide.js" type="module"></script>
 </body>
 </html>

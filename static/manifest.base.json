@@ -11,7 +11,7 @@
   "background": { "service_worker": "background.js", "type": "module" },
   "host_permissions": ["http://*/*", "https://*/*"],
   "content_scripts": [{ "matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "run_at": "document_idle" }],
-  "web_accessible_resources": [{ "resources": ["panel.html", "panel.js", "panel.css", "guide.html"], "matches": ["http://*/*", "https://*/*"] }],
+  "web_accessible_resources": [{ "resources": ["panel.html", "panel.js", "panel.css", "guide.html", "guide.js"], "matches": ["http://*/*", "https://*/*"] }],
   "commands": {
     "leader": {
       "suggested_key": { "default": "Ctrl+Shift+Y" },

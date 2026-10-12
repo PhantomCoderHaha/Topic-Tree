@@ -6,7 +6,7 @@ import type { Action } from "../core/events";
 import type { Tree, TreeNode } from "../core/tree";
 import type { Msg, Snapshot } from "../shared";
 import { extensionBridge, previewBridge, type Bridge } from "./bridge";
-import { buildView, defaultCollapsed, fuzzy, hintLabels, type DisplayRow, type View } from "./view";
+import { buildView, defaultCollapsed, edgePath, fuzzy, hintLabels, type DisplayRow, type View } from "./view";
 
 const ROW = 26, LANE = 16, X0 = 12;
 const params = new URLSearchParams(location.search);
@@ -187,9 +187,7 @@ function body() {
   const xy = (row: number, lane: number) => [X0 + lane * LANE, v.yOf(row) * ROW + ROW / 2];
   for (const e of v.edges) {
     const [x1, y1] = xy(...e.from), [x2, y2] = xy(...e.to);
-    const d = x1 === x2 ? `M${x1} ${y1}V${y2}`
-      : e.kind === "fork" ? `M${x1} ${y1}C${x1} ${y1 + ROW * 0.7} ${x2} ${y1 + ROW * 0.3} ${x2} ${y1 + ROW}V${y2}`
-      : `M${x1} ${y1}V${y2 - ROW}C${x1} ${y2 - ROW * 0.3} ${x2} ${y2 - ROW * 0.7} ${x2} ${y2}`;
+    const d = edgePath(x1, y1, x2, y2, e.kind, ROW);
     g.append(svg("path", { d, stroke: e.colour, "stroke-width": 2, fill: "none", opacity: e.kind === "merge" ? 0.55 : 1,
                            "stroke-dasharray": e.kind === "merge" ? "3 3" : "" }));
   }
