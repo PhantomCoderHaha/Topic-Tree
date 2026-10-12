@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Topic Tree",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keeps your main line of thought visible while you research: a git-style tree of searches, pages and tangents.",
   "minimum_chrome_version": "116",
   "permissions": ["sidePanel", "storage", "unlimitedStorage", "webNavigation", "tabs", "alarms", "nativeMessaging", "scripting"],

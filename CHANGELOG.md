@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 (2026-10-12)
+
+- Guide: explains that double-clicking any node (or `Enter`) reopens that search or website, and that
+  reopening isn't recorded.
+
 ## 0.1.0 (2026-10-12)
 
 First release.

@@ -71,6 +71,9 @@ card in `brave://extensions`. Your sessions are kept.
 | `l` / `h` | unfold / fold (tangents, and ×N site nodes) |
 | `?` | all keys |
 
+**Go back to anything:** double-click a node (or select it and press `Enter`) to reopen that search or
+website. Reopening isn't recorded, so it doesn't clutter the tree.
+
 From any web page: **`Ctrl+Shift+Y`** then `t` `u` `m` `n` or `b`, without leaving the page
 (change the shortcut at `brave://extensions/shortcuts`).
 
