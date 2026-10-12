@@ -11,6 +11,8 @@ export interface Bridge {
   mode: "docked" | "float" | "preview";
   start(onSnapshot: (s: Snapshot) => void): Promise<void>;
   send(msg: Msg): Promise<void>;
+  canFloat(): Promise<boolean>;
+  openGuide(): void;
   /** Must be called directly in a click handler: opening the side panel needs the gesture. */
   dock(): void;
   open(url: string): void;
@@ -36,6 +38,8 @@ export function extensionBridge(mode: "docked" | "float"): Bridge {
       const reply = await chrome.runtime.sendMessage({ ...msg, windowId } as Msg);
       if (reply && "tree" in reply) push(reply as Snapshot);
     },
+    canFloat() { return chrome.runtime.sendMessage({ t: "canFloat?", windowId } satisfies Msg); },
+    openGuide() { void chrome.tabs.create({ url: chrome.runtime.getURL("guide.html"), windowId }); },
     dock() {
       if (windowId !== undefined) void chrome.sidePanel.open({ windowId });
     },
@@ -111,6 +115,8 @@ export function previewBridge(): Bridge {
       if (msg.t === "newSession") tree = emptyTree("preview2", Date.now());
       push(snap());
     },
+    async canFloat() { return true; },
+    openGuide() { window.open("guide.html"); },
     dock() { panel = "docked"; },
     open(url) { console.log("open", url); },
     closeSelf() { console.log("close panel"); },

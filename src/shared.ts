@@ -37,10 +37,11 @@ export type Msg =
   | { t: "settings"; settings: Settings }
   | { t: "dismissDrift"; windowId?: number }
   | { t: "leaderKey"; key: string }
-  | { t: "card?" };
+  | { t: "card?" }
+  | { t: "canFloat?"; windowId?: number };
 
 /** Background -> content script */
-export type TabMsg = { t: "card"; show: boolean } | { t: "arm" };
+export type TabMsg = { t: "card"; show: boolean } | { t: "arm" } | { t: "ping" };
 
 /** Background -> extension pages */
 export type Broadcast = { t: "snapshot"; snapshot: Snapshot } | { t: "close"; windowId: number };

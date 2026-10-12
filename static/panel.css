@@ -29,6 +29,11 @@ header { display: flex; align-items: center; gap: 6px; padding: 8px 6px 8px 12px
 .drift button { padding: 3px 8px; border-radius: 4px; background: #3a3020; }
 .drift button:hover { background: #4a3c26; }
 
+.drift.welcome { background: #172231; border-color: #24405f; color: #cfe3fb; }
+.drift.welcome button { background: #22344a; }
+.drift.welcome button:hover { background: #2b4360; }
+.drift kbd { font: 11px Consolas, monospace; background: rgba(255,255,255,.08); border-radius: 3px; padding: 0 4px; }
+
 /* graph */
 .scroll { flex: 1; overflow: auto; position: relative; scrollbar-width: none; }
 .scroll::-webkit-scrollbar { display: none; }

@@ -7,6 +7,12 @@
  */
 import { LEADER_KEYS, type Msg, type TabMsg } from "./shared";
 
+// injected on demand into tabs that were open before install: never run twice
+const g = globalThis as { __topicTree?: boolean };
+if (!g.__topicTree) { g.__topicTree = true; init(); }
+
+function init() {
+
 const send = (m: Msg) => chrome.runtime.sendMessage(m);
 let host: HTMLDivElement | null = null;
 let root: ShadowRoot | null = null;
@@ -99,9 +105,11 @@ addEventListener("keydown", e => {
   disarm();
 }, true);
 
-chrome.runtime.onMessage.addListener((m: TabMsg) => {
+chrome.runtime.onMessage.addListener((m: TabMsg, _sender, reply) => {
   if (m.t === "card") showCard(m.show);
   if (m.t === "arm") arm();
+  reply(true); // lets the background tell "script present" from "not injected"
 });
 
 void send({ t: "card?" }).then(show => showCard(!!show)).catch(() => {});
+}

@@ -106,7 +106,7 @@ function render() {
   const collapsed = new Set([...defaultCollapsed(t, ui.expanded), ...ui.collapsed].filter(b => !ui.expanded.has(b)));
   ui.view = buildView(t, collapsed);
   placeCursor();
-  app.replaceChildren(header(), driftBanner() ?? "", body(), footerEl(), overlay() ?? "");
+  app.replaceChildren(header(), welcome() ?? "", driftBanner() ?? "", body(), footerEl(), overlay() ?? "");
   renderFooter();
   scrollCursorIntoView();
 }
@@ -134,18 +134,29 @@ function header() {
     h("button", { class: `ctl ${cls}`, title, "aria-label": title, onclick: on }, label);
   const placeBtn = bridge.mode === "float"
     ? ctl("□", "Dock to the side (maximize)", () => { bridge.dock(); send({ t: "place", panel: "docked" }); })
-    : ctl("❐", "Float as a card (restore down)", () => { send({ t: "place", panel: "floating" }); bridge.closeSelf(); });
+    : ctl("❐", "Float as a card (restore down)", () => void floatCard());
   return h("header", {},
     h("div", { class: "title", title: s.hostOk ? "Recording · saved to disk" : "Recording · disk mirror not connected" },
       h("span", { class: `rec ${s.state.recording ? "" : "off"}` }),
       h("strong", {}, mainName()),
       inTangent && h("span", { class: "sub" },
         `› ${branchLabel(t.current)}`)),
+    ctl("?", "Guide and keys", () => bridge.openGuide()),
     ctl("☰", "Sessions", () => openMode("sessions")),
     ctl("⚙", "Settings", () => openMode("settings")),
     ctl("−", "Hide (keeps recording)", () => { send({ t: "place", panel: "hidden" }); bridge.closeSelf(); }),
     placeBtn,
     ctl("✕", "Stop recording this session", () => openMode("confirm"), "close"));
+}
+
+/** First run only: point at the guide until dismissed. */
+function welcome() {
+  if (localStorage.getItem("tt-welcomed")) return null;
+  const done = () => { localStorage.setItem("tt-welcomed", "1"); render(); };
+  return h("div", { class: "drift welcome" },
+    h("span", { innerHTML: "New here? Browse as usual. Press <kbd>t</kbd> when you go off on a side question, <kbd>m</kbd> to come back." }),
+    h("button", { onclick: () => { bridge.openGuide(); done(); } }, "Guide"),
+    h("button", { onclick: done }, "Got it"));
 }
 
 function driftBanner() {
@@ -347,7 +358,9 @@ function overlay() {
         k("r", "name branch"), k("R", "name node"), k("s", "split last page into its own node"),
         k("v", "select past nodes → t / M"), k("z", "branch view"), k("Enter", "open page"),
         k("Ctrl+Shift+Y", "from any page: then t m M b")),
-      h("div", { class: "actions", style: "margin-top:12px" }, h("button", { class: "btn", onclick: close }, "Close"))));
+      h("div", { class: "actions", style: "margin-top:12px" },
+        h("button", { class: "btn", onclick: () => bridge.openGuide() }, "Full guide"),
+        h("button", { class: "btn", onclick: close }, "Close"))));
   }
   return null;
 }
@@ -366,6 +379,13 @@ function openMode(m: Mode) {
   if (m === "find") ui.find = { q: "", sel: 0, results: [] };
   if (m === "sessions") ui.listSel = Math.max(0, ui.snap!.sessions.findIndex(s => s.id === ui.snap!.state.session));
   render();
+}
+async function floatCard() {
+  if (!(await bridge.canFloat())) {
+    return say("This page can't show a floating card (browser pages). Open a website, then try again.", true);
+  }
+  send({ t: "place", panel: "floating" });
+  bridge.closeSelf();
 }
 function stop() { send({ t: "stop" }); ui.mode = "normal"; bridge.closeSelf(); render(); }
 function resume(id: string) { send({ t: "resume", session: id }); ui.mode = "normal"; ui.stick = true; render(); }

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Topic Tree: guide</title>
+<style>
+  :root { color-scheme: dark; --bg:#151515; --bg2:#1d1d1d; --line:#2e2e2e; --fg:#e6e6e6; --dim:#9a9a9a; --accent:#78b6ff; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.6 "Segoe UI",system-ui,sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 28px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 40px 0 10px; }
+  p.lead { color: var(--dim); margin: 0 0 8px; font-size: 16px; }
+  p { margin: 8px 0; }
+  .dim { color: var(--dim); }
+  kbd { font: 13px Consolas, monospace; background: var(--bg2); border: 1px solid var(--line); border-bottom-width: 2px;
+        border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { width: 150px; white-space: nowrap; }
+  ol { padding-left: 20px; } li { margin: 6px 0; }
+  .card { background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin: 12px 0; }
+  .ctl { display:inline-grid; place-items:center; width:26px; height:24px; border:1px solid var(--line); border-radius:5px; color:var(--dim); }
+  code { font: 13px Consolas, monospace; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Topic Tree</h1>
+  <p class="lead">Keeps your main line of thought visible while you research. Every search and page you visit lands on a tree, like a git graph. You tell it when you go off on a tangent, and it shows you the way back.</p>
+
+  <h2>Start in 30 seconds</h2>
+  <ol>
+    <li><b>Pin the icon:</b> puzzle piece in the toolbar → pin <b>Topic Tree</b>. Click it to open the tree on the right.</li>
+    <li><b>Just browse.</b> Recording is on: searches and pages are added to the branch you're on. You don't need to press anything.</li>
+    <li><b>Going off on a side question?</b> Press <kbd>t</kbd> in the tree (or <kbd>Ctrl+Shift+Y</kbd> then <kbd>t</kbd> on any page). You're now on a tangent.</li>
+    <li><b>Done with the side question?</b> Press <kbd>m</kbd> to return to your main branch. The tangent folds away into one line.</li>
+    <li><b>Forgot to mark it?</b> In the tree press <kbd>v</kbd>, move with <kbd>j</kbd>/<kbd>k</kbd> over the pages that were a detour, then press <kbd>t</kbd>.</li>
+  </ol>
+
+  <h2>Without leaving the page</h2>
+  <div class="card">Press <kbd>Ctrl+Shift+Y</kbd>, then one key:
+    <kbd>t</kbd> tangent · <kbd>m</kbd> back to main · <kbd>M</kbd> new topic · <kbd>b</kbd> previous branch.
+    <span class="dim">A small hint appears at the bottom of the page while it waits for your key. Change the shortcut at <code>brave://extensions/shortcuts</code>.</span></div>
+
+  <h2>Keys in the tree</h2>
+  <p class="dim">Click inside the tree first so it has the keyboard. Everything also works with the mouse.</p>
+  <table>
+    <tr><td><kbd>t</kbd></td><td>Start a <b>tangent</b> from where you are (a temporary detour)</td></tr>
+    <tr><td><kbd>m</kbd></td><td>Return to the <b>main</b> branch</td></tr>
+    <tr><td><kbd>M</kbd></td><td><b>New topic</b>: a new main branch, for a complete change of subject</td></tr>
+    <tr><td><kbd>b</kbd> or <kbd>`</kbd></td><td>Back to the <b>previous branch</b> you were on (press again to go further back)</td></tr>
+    <tr><td><kbd>f</kbd></td><td><b>Jump</b>: every branch gets a letter label; type it to go there</td></tr>
+    <tr><td><kbd>/</kbd></td><td><b>Find</b> a branch or page by name; <kbd>↑</kbd><kbd>↓</kbd> then <kbd>Enter</kbd></td></tr>
+    <tr><td><kbd>j</kbd> <kbd>k</kbd></td><td>Move down / up · <kbd>g</kbd> top · <kbd>G</kbd> back to the newest</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Open the page under the cursor (double-click works too)</td></tr>
+    <tr><td><kbd>h</kbd> <kbd>l</kbd></td><td>Fold / unfold a tangent (or click its <span class="dim">↳</span> line)</td></tr>
+    <tr><td><kbd>r</kbd> / <kbd>R</kbd></td><td><b>Name</b> the branch / the page under the cursor</td></tr>
+    <tr><td><kbd>s</kbd></td><td><b>Split</b>: pages on one site share a node; this gives the last one its own</td></tr>
+    <tr><td><kbd>v</kbd></td><td><b>Select</b> past pages (<kbd>j</kbd>/<kbd>k</kbd>), then <kbd>t</kbd> = it was a tangent, <kbd>M</kbd> = it was a new topic. Shift-click also selects.</td></tr>
+    <tr><td><kbd>z</kbd></td><td>Branch view: just the branches, for an overview</td></tr>
+    <tr><td><kbd>?</kbd></td><td>Key list · <kbd>Esc</kbd> cancels anything</td></tr>
+  </table>
+
+  <h2>The buttons at the top</h2>
+  <table>
+    <tr><td><span class="ctl">?</span></td><td>Opens this guide</td></tr>
+    <tr><td><span class="ctl">☰</span></td><td><b>Sessions</b>: resume an earlier tree, or start a new one</td></tr>
+    <tr><td><span class="ctl">⚙</span></td><td><b>Settings</b>: when the drift alarm fires; whether saving to disk is connected</td></tr>
+    <tr><td><span class="ctl">−</span></td><td><b>Hide</b>: the tree disappears but keeps recording. Click the icon to bring it back where it was.</td></tr>
+    <tr><td><span class="ctl">❐</span> <span class="ctl">□</span></td><td><b>Float</b> as a small card over the page, which you can drag by its top edge / <b>dock</b> it back to the side</td></tr>
+    <tr><td><span class="ctl">✕</span></td><td><b>Stop recording</b> this session (asks first). The tree is kept. Click the icon to record again; it then shows <code>off</code> until you do.</td></tr>
+  </table>
+
+  <h2>Reading the tree</h2>
+  <table>
+    <tr><td>● filled dot</td><td>A page you visited (<code>×3</code> = 3 pages on that site in a row)</td></tr>
+    <tr><td>○ ring</td><td>A search (“in quotes”)</td></tr>
+    <tr><td>Lane on the right</td><td>A tangent; the dashed line shows where you came back</td></tr>
+    <tr><td>↳ line</td><td>A finished tangent, folded. Click it to unfold.</td></tr>
+    <tr><td>Glowing dot</td><td>Where you are now</td></tr>
+  </table>
+
+  <h2>The drift alarm</h2>
+  <p>When a tangent reaches a number of steps or minutes (set in <span class="ctl">⚙</span>), a banner asks if you want to return to your main topic. <b>Return</b> takes you back; <b>Keep going</b> hides it for this tangent.</p>
+
+  <h2>Where your data goes</h2>
+  <p>Only on this computer. Each session is saved to <code>%LOCALAPPDATA%\TopicTree\sessions\</code> as <code>&lt;session&gt;.jsonl</code> (every event) and <code>&lt;session&gt;.tree.json</code> (the tree), so you can analyse it later. Nothing is sent anywhere.</p>
+  <p class="dim">The floating card can't appear on browser pages like the New Tab page or settings. Open a website first.</p>
+</main>
+</body>
+</html>

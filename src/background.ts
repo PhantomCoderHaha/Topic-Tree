@@ -174,14 +174,36 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() =>
 
 async function tellTabs(windowId: number, msg: TabMsg) {
   for (const tab of await chrome.tabs.query({ windowId }))
-    if (tab.id !== undefined) chrome.tabs.sendMessage(tab.id, msg).catch(() => {});
+    if (tab.id !== undefined) chrome.tabs.sendMessage(tab.id, msg).catch(() => {}); // tabs without the script have no card to hide
+}
+
+/** Tabs opened before the extension was installed have no content script: inject it. */
+async function ensureContent(tab: chrome.tabs.Tab): Promise<boolean> {
+  if (tab.id === undefined || !tab.url || !isTrackable(tab.url)) return false;
+  const alive = await chrome.tabs.sendMessage(tab.id, { t: "ping" } satisfies TabMsg).then(() => true, () => false);
+  if (alive) return true;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+    return true;
+  } catch (err) {
+    console.warn("Topic Tree: could not inject into", tab.url, err);
+    return false;
+  }
+}
+
+/** Show the floating card in the window's active tab. False when that page can't host one. */
+async function showCardInActiveTab(windowId: number): Promise<boolean> {
+  const [tab] = await chrome.tabs.query({ active: true, windowId });
+  if (!tab || !(await ensureContent(tab))) return false;
+  await chrome.tabs.sendMessage(tab.id!, { t: "card", show: true } satisfies TabMsg);
+  return true;
 }
 
 async function place(windowId: number, panel: WinState["panel"]) {
   const before = await win(windowId);
   const state = await setWin(windowId, { panel, ...(panel !== "hidden" && { lastShown: panel }) });
   if (before.panel === "floating" && panel !== "floating") await tellTabs(windowId, { t: "card", show: false });
-  if (panel === "floating") await tellTabs(windowId, { t: "card", show: true });
+  if (panel === "floating") await showCardInActiveTab(windowId);
   if (before.panel === "docked" && panel !== "docked") post({ t: "close", windowId });
   return state;
 }
@@ -203,7 +225,7 @@ chrome.action.onClicked.addListener(tab => {
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command !== "leader" || !tab?.id) return;
   if (tab.url && isTrackable(tab.url)) {
-    void chrome.tabs.sendMessage(tab.id, { t: "arm" } satisfies TabMsg).catch(() => {});
+    void ensureContent(tab).then(ok => ok && chrome.tabs.sendMessage(tab.id!, { t: "arm" } satisfies TabMsg));
   } else { // brave:// pages etc. have no content script: open the panel instead
     void chrome.sidePanel.open({ windowId: tab.windowId });
     void place(tab.windowId, "docked");
@@ -234,6 +256,10 @@ async function broadcast(windowId: number) { post({ t: "snapshot", snapshot: awa
 async function handle(msg: Msg, sender: chrome.runtime.MessageSender): Promise<unknown> {
   const windowId = ("windowId" in msg && msg.windowId) || sender.tab?.windowId;
   switch (msg.t) {
+    case "canFloat?": {
+      const [tab] = await chrome.tabs.query({ active: true, windowId: windowId ?? undefined });
+      return !!tab?.url && isTrackable(tab.url);
+    }
     case "card?":
       return windowId !== undefined && (await win(windowId)).panel === "floating" && (await win(windowId)).recording;
     case "settings":
@@ -296,7 +322,11 @@ async function badge(windowId: number, state?: WinState) {
       title: s.recording ? "Topic Tree: recording" : "Topic Tree: not recording (click to record)" });
   }
 }
-chrome.tabs.onActivated.addListener(({ windowId }) => void badge(windowId));
+chrome.tabs.onActivated.addListener(async ({ windowId }) => {
+  void badge(windowId);
+  const s = await win(windowId); // the floating card follows you to the tab you switch to
+  if (s.panel === "floating" && s.recording) await showCardInActiveTab(windowId);
+});
 chrome.windows.onCreated.addListener(w => { if (w.id !== undefined) void win(w.id); });
 
 // --- disk mirror through the native host -------------------------------------------
@@ -333,6 +363,11 @@ const host = {
   },
 };
 host.connect();
+
+// first install: open the guide
+chrome.runtime.onInstalled.addListener(d => {
+  if (d.reason === "install") void chrome.tabs.create({ url: chrome.runtime.getURL("guide.html") });
+});
 
 // warm the synchronous cache after a service-worker restart
 void sess.get(null).then(all => {

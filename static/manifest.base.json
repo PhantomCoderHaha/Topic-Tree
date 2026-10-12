@@ -4,13 +4,14 @@
   "version": "0.1.0",
   "description": "Keeps your main line of thought visible while you research: a git-style tree of searches, pages and tangents.",
   "minimum_chrome_version": "116",
-  "permissions": ["sidePanel", "storage", "unlimitedStorage", "webNavigation", "tabs", "alarms", "nativeMessaging"],
+  "permissions": ["sidePanel", "storage", "unlimitedStorage", "webNavigation", "tabs", "alarms", "nativeMessaging", "scripting"],
   "side_panel": { "default_path": "panel.html" },
   "action": { "default_title": "Topic Tree", "default_icon": { "16": "icon16.png", "32": "icon32.png", "48": "icon48.png", "128": "icon128.png" } },
   "icons": { "16": "icon16.png", "32": "icon32.png", "48": "icon48.png", "128": "icon128.png" },
   "background": { "service_worker": "background.js", "type": "module" },
+  "host_permissions": ["http://*/*", "https://*/*"],
   "content_scripts": [{ "matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "run_at": "document_idle" }],
-  "web_accessible_resources": [{ "resources": ["panel.html", "panel.js", "panel.css"], "matches": ["http://*/*", "https://*/*"] }],
+  "web_accessible_resources": [{ "resources": ["panel.html", "panel.js", "panel.css", "guide.html"], "matches": ["http://*/*", "https://*/*"] }],
   "commands": {
     "leader": {
       "suggested_key": { "default": "Ctrl+Shift+Y" },
