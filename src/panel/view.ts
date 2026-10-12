@@ -9,6 +9,7 @@ import type { Tree } from "../core/tree";
 export type DisplayRow =
   | { kind: "node"; node: string; branch: string; lane: number; colour: string; layoutRow: number }
   | { kind: "chip"; branch: string; colour: string; count: number; lane: number }
+  | { kind: "page"; node: string; index: number; branch: string; colour: string; lane: number }
   | { kind: "pending"; branch: string; colour: string; lane: number; forkRow?: number; forkLane?: number;
       branchKind: "main" | "tangent" };
 
@@ -27,7 +28,8 @@ export function defaultCollapsed(t: Tree, expanded: Set<string>): Set<string> {
 }
 
 /** Hide collapsed branches (and everything that forks off them); count what they hold. */
-export function buildView(t: Tree, collapsed: Set<string>): View {
+/** `openNodes`: grouped page nodes (×N) shown unfolded, one row per page. */
+export function buildView(t: Tree, collapsed: Set<string>, openNodes: Set<string> = new Set()): View {
   const hiddenBranches = new Set<string>();
   const isHidden = (id: string): boolean => {
     for (let b = t.branches[id]; b; b = b.parentBranch ? t.branches[b.parentBranch] : undefined!) {
@@ -67,6 +69,9 @@ export function buildView(t: Tree, collapsed: Set<string>): View {
   for (const r of l.rows) {
     yIndex.set(r.row, rows.length);
     rows.push({ kind: "node", node: r.node, branch: r.branch, lane: r.lane, colour: r.colour, layoutRow: r.row });
+    const n = t.nodes[r.node];
+    if (openNodes.has(r.node) && n.pages.length > 1)
+      n.pages.forEach((_, index) => rows.push({ kind: "page", node: r.node, index, branch: r.branch, lane: r.lane, colour: r.colour }));
     pushChips(r.node, r.lane);
   }
   // the branch you just started has no nodes yet: show where the next one will go

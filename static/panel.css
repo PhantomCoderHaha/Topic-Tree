@@ -51,6 +51,10 @@ header { display: flex; align-items: center; gap: 6px; padding: 8px 6px 8px 12px
   max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .row .topic { font-size: 11px; color: var(--dim); border: 1px solid var(--line); padding: 0 6px; border-radius: 9px; flex: none; }
 .row.chip { color: var(--dim); }
+.row.page { height: 22px; font-size: 12px; color: var(--dim); }
+.row.page .label { color: #bdbdbd; }
+.count.fold { border-radius: 4px; padding: 0 4px; color: var(--dim); }
+.count.fold:hover, .count.fold.open { background: var(--bg3); color: var(--fg); }
 .row.pending .label { font-style: italic; opacity: .85; }
 .row.pending.main { border-top: 1px dashed var(--line); } /* a topic shift: the line breaks */
 .row.chip .label::before { content: "↳ "; }

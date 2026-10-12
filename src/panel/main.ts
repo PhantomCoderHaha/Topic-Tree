@@ -26,6 +26,7 @@ const ui = {
   stick: true,
   anchor: -1,
   expanded: new Set<string>(),
+  openNodes: new Set<string>(),       // ×N nodes unfolded into their pages
   collapsed: new Set<string>(),
   hints: new Map<string, string>(),   // label -> branch
   hintFor: "goto" as "goto" | "parent", // f jumps; v … p picks the parent of a new tangent
@@ -86,14 +87,14 @@ const act = (action: Action) => {
   ui.stick = true;
   void bridge.send({ t: "action", action }).then(() => { const m = DONE[action.type]; if (m) say(m); });
 };
-const rowKey = (r: DisplayRow) => r.kind === "node" ? r.node : `${r.kind}:${r.branch}`;
+const rowKey = (r: DisplayRow) => r.kind === "node" ? r.node : r.kind === "page" ? `page:${r.node}:${r.index}` : `${r.kind}:${r.branch}`;
 const send = (m: Msg) => void bridge.send(m);
 function say(text: string, err = false) { ui.msg = text; ui.err = err; renderFooter(); }
 
 function rowAt(i = ui.cursor): DisplayRow | undefined { return ui.view?.rows[i]; }
 function cursorNode(): TreeNode | undefined {
   const r = rowAt();
-  return r?.kind === "node" ? tree().nodes[r.node] : undefined;
+  return r?.kind === "node" || r?.kind === "page" ? tree().nodes[r.node] : undefined; // a page row acts for its node
 }
 function cursorBranch(): string | undefined {
   const r = rowAt();
@@ -116,7 +117,7 @@ function render() {
   if (!ui.snap) return;
   const t = tree();
   const collapsed = new Set([...defaultCollapsed(t, ui.expanded), ...ui.collapsed].filter(b => !ui.expanded.has(b)));
-  ui.view = buildView(t, collapsed);
+  ui.view = buildView(t, collapsed, ui.openNodes);
   placeCursor();
   app.replaceChildren(header(), welcome() ?? "", driftBanner() ?? "", body(), footerEl(), overlay() ?? "");
   renderFooter();
@@ -232,6 +233,18 @@ function body() {
         h("span", { class: "label", style: `color:${r.colour}` }, branchLabel(r.branch)),
         h("span", { class: "count" }, `${r.count}`));
       row.addEventListener("click", () => { ui.expanded.add(r.branch); ui.collapsed.delete(r.branch); render(); });
+    } else if (r.kind === "page") {
+      const n = t.nodes[r.node];
+      const p = n.pages[r.index];
+      // a faint stem from the node down through its pages
+      g.append(svg("path", { d: `M${x} ${y - ROW}V${y}`, stroke: r.colour, "stroke-width": 1.5, opacity: 0.35, fill: "none" }));
+      g.append(svg("circle", { cx: x, cy: y, r: 2.5, fill: r.colour, opacity: 0.6 }));
+      let path = "";
+      try { path = new URL(p.url).pathname; } catch { /* keep empty */ }
+      row = h("div", { class: "row page", style: `padding-left:${gutter + 16}px`, title: p.url },
+        h("span", { class: "label" }, p.title || p.url),
+        path.length > 1 && h("span", { class: "site" }, path));
+      row.addEventListener("dblclick", () => bridge.open(p.url));
     } else {
       const n = t.nodes[r.node];
       const isHead = r.node === head;
@@ -247,7 +260,11 @@ function body() {
         b?.name && h("span", { class: "tag", style: `background:${r.colour}` }, b.name),
         b && !b.name && b.kind === "main" && t.mains.indexOf(b.id) > 0 && h("span", { class: "topic" }, "new topic"),
         h("span", { class: `label ${n.name ? "named" : ""}` }, n.kind === "search" ? `“${nodeLabel(n)}”` : nodeLabel(n)),
-        n.pages.length > 1 && h("span", { class: "count" }, `×${n.pages.length}`),
+        n.pages.length > 1 && h("button", {
+          class: `count fold ${ui.openNodes.has(n.id) ? "open" : ""}`,
+          title: ui.openNodes.has(n.id) ? "Hide the pages (h)" : `Show the ${n.pages.length} pages (l)`,
+          onclick: (e: Event) => { e.stopPropagation(); toggleNode(n.id); },
+        }, `${ui.openNodes.has(n.id) ? "▾" : "▸"} ×${n.pages.length}`),
         n.site && h("span", { class: "site" }, n.site));
       row.addEventListener("dblclick", () => openNode(n));
     }
@@ -376,8 +393,8 @@ function overlay() {
       h("div", { class: "help" },
         k("t", "new tangent from here"), k("u", "close tangent, up one level"), k("m", "back to main"), k("n", "new topic (main branch)"),
         k("b", "previous branch"), k("f", "jump to a branch by label"), k("/", "find branch or node"),
-        k("j k", "move"), k("g G", "top / bottom"), k("h l", "collapse / expand"),
-        k("r", "name branch"), k("e", "name node"), k("s", "split last page into its own node"),
+        k("j k", "move"), k("g G", "top / bottom"), k("h l", "fold / unfold (tangents and ×N pages)"),
+        k("r", "name branch"), k("e", "name node"), k("s", "split: on a page row, from that page"),
         k("v", "select past nodes → t / p / m / n"), k("z", "branch view"), k("Enter", "open page"),
         k("Ctrl+Shift+Y", "from any page: then t u m n b")),
       h("div", { class: "actions", style: "margin-top:12px" },
@@ -496,6 +513,12 @@ function pickParent() {
   say("Tangent of which branch? Type its label.");
 }
 
+function toggleNode(id: string) {
+  if (ui.openNodes.has(id)) ui.openNodes.delete(id); else ui.openNodes.add(id);
+  ui.stick = false;
+  render();
+}
+
 function openNode(n?: TreeNode) {
   const url = n?.pages.at(-1)?.url ?? n?.url;
   if (url) bridge.open(url);
@@ -571,12 +594,22 @@ document.addEventListener("keydown", e => {
     case "r": return openMode("renameBranch");
     case "e": case "R": return cursorNode() ? openMode("renameNode") : say("Put the cursor on a node first.", true);
     case "s": {
-      const n = cursorNode();
+      const n = cursorNode(), r = rowAt();
       if (!n || n.pages.length < 2) return say("Nothing to split: this node has one page.", true);
-      return act({ type: "split", node: n.id, page: n.pages.length - 1 });
+      // on a page row: split from that page; on the node itself: split off the last page
+      const page = r?.kind === "page" ? r.index : n.pages.length - 1;
+      if (page === 0) return say("That's the first page: it already starts this node.", true);
+      return act({ type: "split", node: n.id, page });
     }
     case "v": ui.anchor = ui.cursor; ui.mode = "visual"; return render();
     case "h": {
+      const r = rowAt();
+      if ((r?.kind === "node" || r?.kind === "page") && ui.openNodes.has(r.node)) {
+        ui.openNodes.delete(r.node);
+        ui.cursorKey = r.node; // back onto the node itself
+        ui.stick = false;
+        return render();
+      }
       const b = cursorBranch();
       if (b && tree().branches[b]?.kind === "tangent") { ui.expanded.delete(b); ui.collapsed.add(b); ui.stick = false; render(); }
       return;
@@ -584,11 +617,13 @@ document.addEventListener("keydown", e => {
     case "l": {
       const r = rowAt();
       if (r?.kind === "chip") { ui.expanded.add(r.branch); ui.collapsed.delete(r.branch); render(); }
+      if (r?.kind === "node" && tree().nodes[r.node].pages.length > 1 && !ui.openNodes.has(r.node)) toggleNode(r.node);
       return;
     }
     case "z": ui.zoom = ui.zoom === "nodes" ? "branches" : "nodes"; return render();
     case "Enter":
       if (ui.zoom === "branches") { const x = branchTreeOrder()[ui.listSel]; if (x) goBranch(x.id); return; }
+      { const r = rowAt(); if (r?.kind === "page") return bridge.open(tree().nodes[r.node].pages[r.index].url); }
       return openNode(cursorNode());
     case "?": return openMode("help");
   }

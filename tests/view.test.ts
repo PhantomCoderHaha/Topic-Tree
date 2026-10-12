@@ -84,3 +84,24 @@ describe("just-started branches", () => {
     expect(buildView(run("a", { type: "newMain" }, "b"), new Set()).rows.some(r => r.kind === "pending")).toBe(false);
   });
 });
+
+describe("unfolded site nodes", () => {
+  const pages = (): TopicEvent[] => ["a", "b", "c"].map((x, i) => ({
+    id: `p${i}`, session: "s", seq: i + 1, ts: (i + 1) * 1000, source: "browser" as const,
+    kind: "page" as const, url: `https://dankoe.com/${x}`, title: `Essay ${x}`, site: "dankoe.com" }));
+  it("shows one row per page under an unfolded ×N node, and none when folded", () => {
+    const t = replay("s", pages());
+    const node = Object.keys(t.nodes)[0];
+    expect(buildView(t, new Set()).rows.map(r => r.kind)).toEqual(["node"]);
+    const open = buildView(t, new Set(), new Set([node])).rows;
+    expect(open.map(r => r.kind === "page" ? r.index : r.kind)).toEqual(["node", 0, 1, 2]);
+  });
+  it("keeps graph rows aligned below the unfolded pages", () => {
+    const evs = [...pages(), { id: "q", session: "s", seq: 9, ts: 9000, source: "browser" as const, kind: "search" as const, query: "next" }];
+    const t = replay("s", evs);
+    const node = Object.values(t.nodes).find(n => n.kind === "page")!.id;
+    const v = buildView(t, new Set(), new Set([node]));
+    const search = v.rows.find(r => r.kind === "node" && t.nodes[r.node].kind === "search")!;
+    expect(search.kind === "node" && v.yOf(search.layoutRow)).toBe(4);
+  });
+});
