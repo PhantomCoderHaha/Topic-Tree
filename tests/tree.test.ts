@@ -156,3 +156,18 @@ describe("layout", () => {
     expect(layout(t).branches.filter(b => b.topicBreak).map(b => b.branch)).toEqual([t.mains[1]]);
   });
 });
+
+describe("up one level", () => {
+  it("closes a nested tangent and returns to the tangent it forked from, not to main", () => {
+    const t = run("q:a", { type: "tangent" }, "q:b", { type: "tangent" }, "q:c", { type: "up" }, "q:b2");
+    const [outer, inner] = Object.values(t.branches).filter(b => b.kind === "tangent").sort((x, y) => x.born - y.born);
+    expect(t.current).toBe(outer.id);
+    expect(inner.returned).toBe(true);
+    expect(outer.returned).toBe(false);
+    expect(titles(t, outer.id)).toEqual(["b", "b2"]);
+  });
+  it("does nothing on a main branch", () => {
+    const t = run("q:a", { type: "up" });
+    expect(t.current).toBe(t.mains[0]);
+  });
+});

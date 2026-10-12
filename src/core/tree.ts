@@ -154,6 +154,13 @@ function act(t: Tree, a: Action, ts: number) {
       goTo(t, main);
       break;
     }
+    case "up": {
+      const b = t.branches[t.current];
+      if (b.kind !== "tangent" || !b.parentBranch) break; // already on a main branch
+      b.returned = true;
+      goTo(t, b.parentBranch);
+      break;
+    }
     case "newMain":
       goTo(t, newBranch(t, "main", ts).id);
       break;

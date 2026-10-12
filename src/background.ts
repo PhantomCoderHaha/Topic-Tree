@@ -105,6 +105,9 @@ const lastUrl = new Map<number, string>();
 const openerOf = new Map<number, number>();
 const pending = new Map<number, { url: string; fromSearch: boolean; redirect: boolean }>();
 const lastQuery = new Map<number, string>(); // windowId -> last search query (back to results != new node)
+// tabs navigated by clicking a node in the tree: a revisit, not new research. The next
+// top-level commit in that tab (whatever URL it lands on after redirects) is not recorded.
+const revisit = new Map<number, { until: number; seen: boolean }>();
 
 chrome.tabs.onCreated.addListener(tab => {
   if (tab.id !== undefined && tab.openerTabId !== undefined) openerOf.set(tab.id, tab.openerTabId);
@@ -118,6 +121,18 @@ chrome.webNavigation.onCommitted.addListener(async d => {
   const previous = lastUrl.get(d.tabId) ?? (openerOf.has(d.tabId) ? lastUrl.get(openerOf.get(d.tabId)!) : undefined);
   lastUrl.set(d.tabId, d.url);
   if (d.transitionType === "reload" || d.transitionQualifiers.includes("forward_back")) return;
+  const rv = revisit.get(d.tabId);
+  if (rv) {
+    // skip the revisit's own commit (a server redirect commits only its final URL),
+    // plus any client-side redirects that follow it within a few seconds
+    if (Date.now() < rv.until && (!rv.seen || d.transitionQualifiers.includes("client_redirect"))) {
+      rv.seen = true;
+      const search = parseSearch(d.url);
+      if (search) lastQuery.set(tab.windowId, search.query);
+      return;
+    }
+    revisit.delete(d.tabId);
+  }
 
   const search = parseSearch(d.url);
   if (search) {
@@ -256,6 +271,13 @@ async function broadcast(windowId: number) { post({ t: "snapshot", snapshot: awa
 async function handle(msg: Msg, sender: chrome.runtime.MessageSender): Promise<unknown> {
   const windowId = ("windowId" in msg && msg.windowId) || sender.tab?.windowId;
   switch (msg.t) {
+    case "open": {
+      const [tab] = await chrome.tabs.query({ active: true, windowId: windowId ?? undefined });
+      if (tab?.id === undefined) return false;
+      revisit.set(tab.id, { until: Date.now() + 5000, seen: false });
+      await chrome.tabs.update(tab.id, { url: msg.url });
+      return true;
+    }
     case "canFloat?": {
       const [tab] = await chrome.tabs.query({ active: true, windowId: windowId ?? undefined });
       return !!tab?.url && isTrackable(tab.url);

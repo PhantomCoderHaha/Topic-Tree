@@ -38,7 +38,8 @@ export type Msg =
   | { t: "dismissDrift"; windowId?: number }
   | { t: "leaderKey"; key: string }
   | { t: "card?" }
-  | { t: "canFloat?"; windowId?: number };
+  | { t: "canFloat?"; windowId?: number }
+  | { t: "open"; windowId?: number; url: string };
 
 /** Background -> content script */
 export type TabMsg = { t: "card"; show: boolean } | { t: "arm" } | { t: "ping" };
@@ -49,6 +50,7 @@ export type Broadcast = { t: "snapshot"; snapshot: Snapshot } | { t: "close"; wi
 export const LEADER_KEYS: Record<string, Action | "back"> = {
   t: { type: "tangent" },
   m: { type: "main" },
+  u: { type: "up" },
   M: { type: "newMain" },
   b: "back",
 };

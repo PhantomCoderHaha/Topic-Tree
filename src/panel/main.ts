@@ -301,7 +301,7 @@ function renderFooter() {
   f.replaceChildren(h("span", {
     class: `msg ${ui.err ? "err" : ""}`,
     innerHTML: ui.msg ? escapeHtml(ui.msg) : modeText[ui.mode]
-      ?? "<kbd>t</kbd> tangent · <kbd>m</kbd> main · <kbd>M</kbd> new topic · <kbd>f</kbd> jump · <kbd>/</kbd> find · <kbd>?</kbd> keys",
+      ?? "<kbd>t</kbd> tangent · <kbd>u</kbd> up · <kbd>m</kbd> main · <kbd>M</kbd> new topic · <kbd>f</kbd> jump · <kbd>?</kbd> keys",
   }));
 }
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
@@ -350,12 +350,12 @@ function overlay() {
     const k = (keys: string, what: string) => h("div", { innerHTML: `<kbd>${keys}</kbd> ${what}` });
     return wrap(h("div", { class: "dialog", style: "width:min(420px,94%)" }, h("h3", {}, "Keys"),
       h("div", { class: "help" },
-        k("t", "new tangent from here"), k("m", "back to main"), k("M", "new topic (main branch)"),
+        k("t", "new tangent from here"), k("u", "close tangent, up one level"), k("m", "back to main"), k("M", "new topic (main branch)"),
         k("b", "previous branch"), k("f", "jump to a branch by label"), k("/", "find branch or node"),
         k("j k", "move"), k("g G", "top / bottom"), k("h l", "collapse / expand"),
         k("r", "name branch"), k("R", "name node"), k("s", "split last page into its own node"),
         k("v", "select past nodes → t / M"), k("z", "branch view"), k("Enter", "open page"),
-        k("Ctrl+Shift+Y", "from any page: then t m M b")),
+        k("Ctrl+Shift+Y", "from any page: then t u m M b")),
       h("div", { class: "actions", style: "margin-top:12px" },
         h("button", { class: "btn", onclick: () => bridge.openGuide() }, "Full guide"),
         h("button", { class: "btn", onclick: close }, "Close"))));
@@ -511,6 +511,7 @@ document.addEventListener("keydown", e => {
     case "G": ui.stick = true; return render();
     case "t": return act({ type: "tangent" });
     case "m": return act({ type: "main" });
+    case "u": return act({ type: "up" });
     case "M": return act({ type: "newMain" });
     case "b": case "`": return back();
     case "o": if (e.ctrlKey) { e.preventDefault(); return back(); } return;

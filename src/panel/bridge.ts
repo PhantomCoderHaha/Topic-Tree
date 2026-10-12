@@ -43,11 +43,7 @@ export function extensionBridge(mode: "docked" | "float"): Bridge {
     dock() {
       if (windowId !== undefined) void chrome.sidePanel.open({ windowId });
     },
-    open(url) {
-      void chrome.tabs.query({ active: true, windowId }).then(([tab]) => {
-        if (tab?.id !== undefined) void chrome.tabs.update(tab.id, { url });
-      });
-    },
+    open(url) { void chrome.runtime.sendMessage({ t: "open", windowId, url } satisfies Msg); },
     closeSelf() { if (mode === "docked") window.close(); },
   };
 }

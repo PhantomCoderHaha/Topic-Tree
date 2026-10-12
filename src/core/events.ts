@@ -40,6 +40,7 @@ export interface ActionEvent extends Base {
 export type Action =
   | { type: "tangent" }                                   // branch off temporarily from here
   | { type: "main" }                                      // return to the main branch
+  | { type: "up" }                                        // close this tangent, back to the branch it forked from
   | { type: "newMain" }                                   // topic shift: start a new main branch
   | { type: "goto"; branch: string }                      // jump to any branch (tangent or earlier main)
   | { type: "renameBranch"; branch: string; name: string }
