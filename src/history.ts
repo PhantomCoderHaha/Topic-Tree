@@ -10,6 +10,7 @@ let sessions: SessionInfo[] = [];
 let active = new Set<string>();          // sessions open in some window right now
 const selected = new Set<string>();
 let cursor = 0;
+let anchor = -1;                         // last clicked row, for shift-click ranges
 let query = "";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -59,10 +60,11 @@ function render() {
     const day = dayLabel(s.started);
     if (day !== lastDay) { list.append(Object.assign(document.createElement("h2"), { textContent: day })); lastDay = day; }
     const row = document.createElement("div");
-    row.className = `item ${i === cursor ? "cursor" : ""}`;
+    row.className = `item ${i === cursor ? "cursor" : ""} ${selected.has(s.id) ? "sel" : ""}`;
     const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: selected.has(s.id) });
     box.setAttribute("aria-label", `Select ${s.title}`);
-    box.addEventListener("change", () => { toggle(s.id, box.checked); });
+    box.addEventListener("click", e => e.stopPropagation()); // the row's own click handles it
+    box.addEventListener("change", () => { anchor = i; cursor = i; toggle(s.id, box.checked); });
     const title = Object.assign(document.createElement("span"), { className: "title", textContent: s.title });
     const meta = Object.assign(document.createElement("span"), { className: "meta",
       textContent: `${s.nodes} node${s.nodes === 1 ? "" : "s"} · ${new Date(s.started).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` });
@@ -75,7 +77,19 @@ function render() {
     row.append(box, title);
     if (active.has(s.id)) row.append(Object.assign(document.createElement("span"), { className: "now", textContent: "open now" }));
     row.append(meta, acts);
-    row.addEventListener("click", () => { cursor = i; render(); });
+    // clicking anywhere on a row selects it; Shift-click selects everything in between
+    row.addEventListener("click", e => {
+      if (e.shiftKey && anchor >= 0) {
+        const [a, b] = [Math.min(anchor, i), Math.max(anchor, i)];
+        const on = !selected.has(s.id) || selected.has(items[anchor]?.id);
+        for (const x of items.slice(a, b + 1)) if (on) selected.add(x.id); else selected.delete(x.id);
+      } else {
+        if (selected.has(s.id)) selected.delete(s.id); else selected.add(s.id);
+        anchor = i;
+      }
+      cursor = i;
+      render();
+    });
     row.addEventListener("dblclick", () => void openSession(s.id));
     list.append(row);
   });
@@ -85,6 +99,7 @@ function render() {
   all.indeterminate = visibleSelected > 0 && visibleSelected < items.length;
   $("count").textContent = selected.size ? `${selected.size} selected` : `${items.length} session${items.length === 1 ? "" : "s"}`;
   $<HTMLButtonElement>("del").disabled = !selected.size;
+  $<HTMLButtonElement>("clear").hidden = !selected.size;
   document.querySelector(".item.cursor")?.scrollIntoView({ block: "nearest" });
 }
 
@@ -150,6 +165,7 @@ $("all").addEventListener("change", e => {
   render();
 });
 $("del").addEventListener("click", () => confirmDelete([...selected]));
+$("clear").addEventListener("click", () => { selected.clear(); render(); });
 document.addEventListener("keydown", e => {
   const typing = (e.target as HTMLElement).tagName === "INPUT" && (e.target as HTMLInputElement).type === "search";
   if (typing) { if (e.key === "Escape" || e.key === "Enter") (e.target as HTMLElement).blur(); return; }

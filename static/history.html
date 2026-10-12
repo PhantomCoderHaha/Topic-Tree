@@ -23,14 +23,18 @@
   button:disabled { opacity: .4; cursor: default; }
   .count { color: var(--dim); white-space: nowrap; }
   h2 { font-size: 13px; color: var(--dim); font-weight: 600; margin: 22px 0 6px; text-transform: none; }
-  .item { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: default; }
+  .item { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 6px; cursor: pointer; user-select: none; }
+  .selall { display: flex; align-items: center; gap: 6px; color: var(--dim); cursor: pointer; white-space: nowrap; }
+  .selall input { width: 18px; height: 18px; accent-color: var(--accent); }
   .item:hover, .item.cursor { background: var(--bg2); }
   .item.cursor { outline: 1px solid var(--line); }
-  .item input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+  .item.sel { background: #1a2633; }
+  .item.sel:hover { background: #1f2d3c; }
+  .item input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; cursor: pointer; }
   .item .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .item .meta { color: var(--dim); font-size: 12.5px; white-space: nowrap; }
   .item .now { color: var(--accent); font-size: 11.5px; border: 1px solid #24405f; border-radius: 9px; padding: 0 6px; }
-  .item .acts { display: flex; gap: 4px; opacity: 0; }
+  .item .acts { display: flex; gap: 4px; opacity: .55; }
   .item:hover .acts, .item.cursor .acts { opacity: 1; }
   .item .acts button { padding: 3px 8px; font-size: 12.5px; }
   .empty { color: var(--dim); padding: 40px 0; text-align: center; }
@@ -51,13 +55,14 @@
   <p class="lead">Your past research sessions. Open one to continue its tree in this window, or delete what you don't need.
     Deleting removes the session from Topic Tree <b>and</b> its saved files on this computer.</p>
   <div class="bar">
-    <input type="checkbox" id="all" title="Select all shown" aria-label="Select all shown">
+    <label class="selall"><input type="checkbox" id="all"> Select all</label>
     <input type="search" id="q" placeholder="Search sessions" aria-label="Search sessions">
     <span class="count" id="count"></span>
+    <button id="clear" hidden>Clear</button>
     <button class="danger" id="del" disabled>Delete selected</button>
   </div>
   <div id="list"></div>
-  <p class="keys"><kbd>/</kbd> search · <kbd>j</kbd> <kbd>k</kbd> move · <kbd>x</kbd> select · <kbd>Enter</kbd> open · <kbd>Delete</kbd> delete selected (or the one under the cursor)</p>
+  <p class="keys">Click a session to select it (Shift-click selects a range). Keyboard: <kbd>/</kbd> search · <kbd>j</kbd> <kbd>k</kbd> move · <kbd>x</kbd> select · <kbd>Enter</kbd> open · <kbd>Delete</kbd> delete selected (or the one under the cursor)</p>
 </main>
 <script src="history.js" type="module"></script>
 </body>
