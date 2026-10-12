@@ -5,8 +5,9 @@
  * Storage: chrome.storage.local  log:<session> (events) · sessions (index) · settings · flushed:<session>
  *          chrome.storage.session win:<windowId> (per-window state; a browser restart starts fresh)
  */
-import { isTrackable, parseSearch, siteOf } from "./core/capture";
+import { cleanUrl, isTrackable, parseSearch, siteOf } from "./core/capture";
 import type { Action, TopicEvent } from "./core/events";
+import { serial } from "./core/serial";
 import { apply, drift, emptyTree, replay, type Tree } from "./core/tree";
 import { DEFAULT_SETTINGS, LEADER_KEYS, type Broadcast, type Msg, type SessionInfo, type Settings,
          type Snapshot, type TabMsg, type WinState } from "./shared";
@@ -43,7 +44,17 @@ const newSessionId = () => `${new Date().toISOString().slice(0, 16).replace(/[-:
 // user gesture, so the icon/shortcut handlers can't await storage before calling it
 const winCache = new Map<number, WinState>();
 
-async function win(windowId: number): Promise<WinState> {
+// one lookup per window at a time: two racing first lookups would each create a session
+const winLoading = new Map<number, Promise<WinState>>();
+function win(windowId: number): Promise<WinState> {
+  let p = winLoading.get(windowId);
+  if (!p) {
+    p = loadWin(windowId).finally(() => winLoading.delete(windowId));
+    winLoading.set(windowId, p);
+  }
+  return p;
+}
+async function loadWin(windowId: number): Promise<WinState> {
   const key = `win:${windowId}`;
   const stored = (await sess.get(key))[key] as WinState | undefined;
   if (stored) { winCache.set(windowId, stored); return stored; }
@@ -73,10 +84,16 @@ type Capture = Omit<Extract<TopicEvent, { kind: "search" }>, "id" | "session" | 
              | Omit<Extract<TopicEvent, { kind: "page" }>, "id" | "session" | "seq" | "ts" | "source">
              | Omit<Extract<TopicEvent, { kind: "action" }>, "id" | "session" | "seq" | "ts" | "source">;
 
-async function record(windowId: number, body: Capture, opts: { force?: boolean } = {}) {
+// every write goes through one queue: record() reads the tree, awaits, then stores it
+const writes = serial();
+function record(windowId: number, body: Capture, opts: { force?: boolean } = {}) {
+  return writes(() => recordNow(windowId, body, opts));
+}
+async function recordNow(windowId: number, body: Capture, opts: { force?: boolean }) {
   const state = await win(windowId);
   if (!state.recording && !opts.force) return;
   const events = await log(state.session);
+  if ("url" in body && body.url) body = { ...body, url: cleanUrl(body.url) }; // no codes/tokens on disk
   const event = { ...body, id: crypto.randomUUID().slice(0, 8), session: state.session,
                   seq: (events.at(-1)?.seq ?? 0) + 1, ts: Date.now(), source: "browser" } as TopicEvent;
   events.push(event);
@@ -102,8 +119,9 @@ async function updateIndex(t: Tree) {
 
 // per-tab memory: last committed URL (to tell "opened from a search") and pending page
 const lastUrl = new Map<number, string>();
+const lastCommit = new Map<number, number>(); // tabId -> when its last top-level page committed
 const openerOf = new Map<number, number>();
-const pending = new Map<number, { url: string; fromSearch: boolean; redirect: boolean }>();
+const pending = new Map<number, { url: string; fromSearch: boolean; redirect: boolean; from?: string }>();
 const lastQuery = new Map<number, string>(); // windowId -> last search query (back to results != new node)
 // tabs navigated by clicking a node in the tree: a revisit, not new research. The next
 // top-level commit in that tab (whatever URL it lands on after redirects) is not recorded.
@@ -112,14 +130,17 @@ const revisit = new Map<number, { until: number; seen: boolean }>();
 chrome.tabs.onCreated.addListener(tab => {
   if (tab.id !== undefined && tab.openerTabId !== undefined) openerOf.set(tab.id, tab.openerTabId);
 });
-chrome.tabs.onRemoved.addListener(id => { lastUrl.delete(id); openerOf.delete(id); pending.delete(id); });
+chrome.tabs.onRemoved.addListener(id => { lastUrl.delete(id); lastCommit.delete(id); openerOf.delete(id); pending.delete(id); });
 
 chrome.webNavigation.onCommitted.addListener(async d => {
   if (d.frameId !== 0 || !isTrackable(d.url)) return;
   const tab = await chrome.tabs.get(d.tabId).catch(() => undefined);
   if (!tab || tab.incognito) return;
-  const previous = lastUrl.get(d.tabId) ?? (openerOf.has(d.tabId) ? lastUrl.get(openerOf.get(d.tabId)!) : undefined);
+  const here = lastUrl.get(d.tabId); // this tab's previous page (what a redirect bounced from)
+  const previous = here ?? (openerOf.has(d.tabId) ? lastUrl.get(openerOf.get(d.tabId)!) : undefined);
   lastUrl.set(d.tabId, d.url);
+  const dwell = Date.now() - (lastCommit.get(d.tabId) ?? 0);
+  lastCommit.set(d.tabId, Date.now());
   if (d.transitionType === "reload" || d.transitionQualifiers.includes("forward_back")) return;
   const rv = revisit.get(d.tabId);
   if (rv) {
@@ -134,21 +155,31 @@ chrome.webNavigation.onCommitted.addListener(async d => {
     revisit.delete(d.tabId);
   }
 
-  const search = parseSearch(d.url);
-  if (search) {
-    if (lastQuery.get(tab.windowId) === search.query) return; // same results page again
-    lastQuery.set(tab.windowId, search.query);
-    await record(tab.windowId, { kind: "search", query: search.query, url: d.url, engine: search.engine });
-    return;
-  }
+  if (await captureSearch(tab.windowId, d.url)) return;
   // a server redirect commits only the final URL, so it is already "not a node";
-  // a client redirect commits twice: the second one rewrites the first
+  // a client redirect, or a form that posted itself within moments of loading (SAML/SSO
+  // hand-offs), marks the page before it as a pass-through (folded into this one's "via")
+  const redirect = d.transitionQualifiers.includes("client_redirect")
+    || (d.transitionType === "form_submit" && dwell < 3000);
   pending.set(d.tabId, {
     url: d.url,
     fromSearch: !!previous && !!parseSearch(previous) && d.transitionType === "link",
-    redirect: d.transitionQualifiers.includes("client_redirect"),
+    redirect,
+    ...(redirect && here && { from: cleanUrl(here) }), // stored URLs are cleaned, so compare cleaned
   });
 });
+
+/** A results page: a new query is a search node; the same query again (back to the
+ *  results, or the results page updating itself) is not a node. True when it was one. */
+async function captureSearch(windowId: number, url: string): Promise<boolean> {
+  const search = parseSearch(url);
+  if (!search) return false;
+  if (lastQuery.get(windowId) !== search.query) {
+    lastQuery.set(windowId, search.query);
+    await record(windowId, { kind: "search", query: search.query, url, engine: search.engine });
+  }
+  return true;
+}
 
 async function emitPage(tabId: number, url: string) {
   const p = pending.get(tabId);
@@ -157,13 +188,18 @@ async function emitPage(tabId: number, url: string) {
   const tab = await chrome.tabs.get(tabId).catch(() => undefined);
   if (!tab) return;
   await record(tab.windowId, { kind: "page", url, title: tab.title || url, site: siteOf(url),
-                               ...(p.fromSearch && { fromSearch: true }), ...(p.redirect && { redirect: true }) });
+                               ...(p.fromSearch && { fromSearch: true }), ...(p.redirect && { redirect: true }),
+                               ...(p.from && { from: p.from }) });
 }
 chrome.webNavigation.onCompleted.addListener(d => { if (d.frameId === 0) void emitPage(d.tabId, d.url); });
-// single-page apps (YouTube etc.) change URL without a new document
-chrome.webNavigation.onHistoryStateUpdated.addListener(d => {
+// single-page apps (YouTube etc.) change URL without a new document. Search results
+// pages do it too (Google adds params as you use them): those are the search, not a page.
+chrome.webNavigation.onHistoryStateUpdated.addListener(async d => {
   if (d.frameId !== 0 || !isTrackable(d.url) || lastUrl.get(d.tabId) === d.url) return;
   lastUrl.set(d.tabId, d.url);
+  const tab = await chrome.tabs.get(d.tabId).catch(() => undefined);
+  if (!tab || tab.incognito) return;
+  if (await captureSearch(tab.windowId, d.url)) { pending.delete(d.tabId); return; }
   pending.set(d.tabId, { url: d.url, fromSearch: false, redirect: false });
   setTimeout(() => void emitPage(d.tabId, d.url), 1200); // let the title catch up
 });
@@ -181,7 +217,7 @@ async function checkDrift(windowId: number) {
 }
 chrome.alarms.create("drift", { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(async () => {
-  for (const w of await chrome.windows.getAll()) if (w.id !== undefined) await checkDrift(w.id);
+  for (const w of await chrome.windows.getAll({ windowTypes: ["normal"] })) if (w.id !== undefined) await checkDrift(w.id);
 });
 
 // --- panel placement ---------------------------------------------------------------
@@ -223,13 +259,24 @@ async function place(windowId: number, panel: WinState["panel"]) {
   return state;
 }
 
+// Opening the panel yourself makes its keys live. A panel that is already open hears the
+// broadcast; one still loading asks "engaged?" when it starts (a few seconds' grace).
+const engagedAt = new Map<number, number>();
+function engage(windowId: number) {
+  engagedAt.set(windowId, Date.now());
+  post({ t: "engage", windowId });
+}
+
 // The icon: off -> record again; hidden -> bring back the last place (Windows taskbar style)
 chrome.action.onClicked.addListener(tab => {
   const windowId = tab.windowId;
   const cached = winCache.get(windowId);
   const target = !cached ? "docked"
     : cached.panel === "hidden" || !cached.recording ? cached.lastShown : cached.panel;
-  if (target === "docked") void chrome.sidePanel.open({ windowId }); // first, while the gesture is live
+  if (target === "docked") {
+    void chrome.sidePanel.open({ windowId }); // first, while the gesture is live
+    engage(windowId);
+  }
   void (async () => {
     if (!(await win(windowId)).recording) await setWin(windowId, { recording: true });
     await place(windowId, target);
@@ -243,6 +290,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
     void ensureContent(tab).then(ok => ok && chrome.tabs.sendMessage(tab.id!, { t: "arm" } satisfies TabMsg));
   } else { // brave:// pages etc. have no content script: open the panel instead
     void chrome.sidePanel.open({ windowId: tab.windowId });
+    engage(tab.windowId);
     void place(tab.windowId, "docked");
   }
 });
@@ -278,6 +326,11 @@ async function handle(msg: Msg, sender: chrome.runtime.MessageSender): Promise<u
       await chrome.tabs.update(tab.id, { url: msg.url });
       return true;
     }
+    case "engaged?": {
+      const at = windowId !== undefined ? engagedAt.get(windowId) : undefined;
+      if (windowId !== undefined) engagedAt.delete(windowId);
+      return at !== undefined && Date.now() - at < 5000;
+    }
     case "canFloat?": {
       const [tab] = await chrome.tabs.query({ active: true, windowId: windowId ?? undefined });
       return !!tab?.url && isTrackable(tab.url);
@@ -293,7 +346,7 @@ async function handle(msg: Msg, sender: chrome.runtime.MessageSender): Promise<u
       return { sessions: await sessions(), active: activeIds };
     }
     case "deleteSessions":
-      await deleteSessions(msg.ids);
+      await writes(() => deleteSessions(msg.ids)); // never mid-way through a recording write
       return true;
     case "leaderKey": {
       if (windowId === undefined) return false;
@@ -375,12 +428,17 @@ chrome.tabs.onActivated.addListener(async ({ windowId }) => {
   const s = await win(windowId); // the floating card follows you to the tab you switch to
   if (s.panel === "floating" && s.recording) await showCardInActiveTab(windowId);
 });
-chrome.windows.onCreated.addListener(w => { if (w.id !== undefined) void win(w.id); });
+// browsing windows only: devtools and popups get a session once something is recorded in them
+chrome.windows.onCreated.addListener(w => { if (w.id !== undefined && w.type === "normal") void win(w.id); });
 
 // --- disk mirror through the native host -------------------------------------------
 const host = {
   port: null as chrome.runtime.Port | null,
   ok: false,
+  // while the backlog flushes, live events wait: the host keeps only seqs above the
+  // highest it has, so a newer live event arriving first would make it drop older ones
+  flushing: false,
+  queued: [] as Array<[TopicEvent, Tree]>,
   connect() {
     try {
       this.port = chrome.runtime.connectNative(HOST);
@@ -402,19 +460,29 @@ const host = {
       local.set({ pendingDeletes: [...new Set([...(r.pendingDeletes ?? []), session])] }));
   },
   send(event: TopicEvent, t: Tree) {
+    if (this.flushing) { this.queued.push([event, t]); return; }
+    this.post(event, t);
+  },
+  post(event: TopicEvent, t: Tree) {
     if (!this.port) return;
     try { this.port.postMessage({ type: "event", event, tree: t }); } catch { this.ok = false; }
   },
   async flushBacklog() {
-    const pendingDeletes: string[] = (await local.get("pendingDeletes")).pendingDeletes ?? [];
-    for (const s of pendingDeletes) this.port?.postMessage({ type: "delete", session: s });
-    if (pendingDeletes.length) await local.remove("pendingDeletes");
-    for (const s of await sessions()) {
-      const done = (await local.get(`flushed:${s.id}`))[`flushed:${s.id}`] ?? 0;
-      const events = (await log(s.id)).filter(e => e.seq > done);
-      if (!events.length) continue;
-      let t = await tree(s.id);
-      for (const e of events) this.send(e, t);
+    this.flushing = true;
+    try {
+      const pendingDeletes: string[] = (await local.get("pendingDeletes")).pendingDeletes ?? [];
+      for (const s of pendingDeletes) this.port?.postMessage({ type: "delete", session: s });
+      if (pendingDeletes.length) await local.remove("pendingDeletes");
+      for (const s of await sessions()) {
+        const done = (await local.get(`flushed:${s.id}`))[`flushed:${s.id}`] ?? 0;
+        const events = (await log(s.id)).filter(e => e.seq > done);
+        if (!events.length) continue;
+        const t = await tree(s.id);
+        for (const e of events) this.post(e, t);
+      }
+    } finally {
+      this.flushing = false;
+      for (const [e, t] of this.queued.splice(0)) this.post(e, t); // already-flushed seqs are deduped by the host
     }
   },
 };

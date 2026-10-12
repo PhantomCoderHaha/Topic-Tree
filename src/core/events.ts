@@ -21,14 +21,15 @@ export interface SearchEvent extends Base {
   engine?: string;   // google | brave | bing | claude
 }
 
-/** A page the person landed on (redirects never become events). */
+/** A page the person landed on (server redirects never become events). */
 export interface PageEvent extends Base {
   kind: "page";
   url: string;
   title: string;
   site: string;          // hostname without "www."
   fromSearch?: boolean;  // opened from a search results page: hangs under that search
-  redirect?: boolean;    // a client-side redirect: replaces the page just recorded
+  redirect?: boolean;    // arrived by client redirect / instant form post: the page before was a pass-through
+  from?: string;         // with redirect: that page's URL in the same tab (other tabs' pages are never folded)
 }
 
 /** Something the person did to the tree. */

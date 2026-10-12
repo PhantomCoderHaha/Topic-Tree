@@ -2,11 +2,12 @@
  * The Topic Tree panel: docked (side panel), floating (iframe in the page) or preview.
  * Keyboard-first (Vim-style modes), every action also reachable by mouse.
  */
+import { siteOf } from "../core/capture";
 import type { Action } from "../core/events";
 import type { Tree, TreeNode } from "../core/tree";
 import type { Msg, Snapshot } from "../shared";
 import { extensionBridge, previewBridge, type Bridge } from "./bridge";
-import { buildView, defaultCollapsed, edgePath, fuzzy, hintLabels, type DisplayRow, type View } from "./view";
+import { buildView, defaultCollapsed, edgePath, fuzzy, hintLabels, keyGate, renameTarget, type DisplayRow, type View } from "./view";
 
 const ROW = 26, LANE = 16, X0 = 12;
 const params = new URLSearchParams(location.search);
@@ -37,6 +38,9 @@ const ui = {
   msg: "",
   err: false,
   dismissed: new Set<string>(),
+  engaged: false,                     // keys act only after you've engaged the panel (see keyGate)
+  input: null as HTMLInputElement | null, // the open find/rename field, kept across re-renders
+  renameTo: null as { branch: string } | { node: string } | null, // fixed when the rename box opens
 };
 
 // --- tiny DOM helper ------------------------------------------------------------------
@@ -62,6 +66,8 @@ const svg = (tag: string, attrs: Record<string, string | number>) => {
 // --- naming -----------------------------------------------------------------------------
 const tree = (): Tree => ui.snap!.tree;
 const nodeLabel = (n: TreeNode) => n.name ?? n.title;
+/** Other sites passed through on the way to a node (same-site bounces aren't worth a mention). */
+const viaSites = (n: TreeNode) => [...new Set((n.via ?? []).map(v => siteOf(v.url)))].filter(s => s !== n.site);
 function branchLabel(id: string): string {
   const t = tree(), b = t.branches[id];
   if (b.name) return b.name;
@@ -119,8 +125,9 @@ function render() {
   const collapsed = new Set([...defaultCollapsed(t, ui.expanded), ...ui.collapsed].filter(b => !ui.expanded.has(b)));
   ui.view = buildView(t, collapsed, ui.openNodes);
   placeCursor();
+  const typing = !!ui.input && document.activeElement === ui.input; // rebuilding the DOM blurs it
   app.replaceChildren(header(), welcome() ?? "", driftBanner() ?? "", body(), footerEl(), overlay() ?? "");
-  renderFooter();
+  renderFooter(typing);
   scrollCursorIntoView();
 }
 
@@ -148,7 +155,7 @@ function header() {
   const placeBtn = bridge.mode === "float"
     ? ctl("□", "Dock to the side (maximize)", () => { bridge.dock(); send({ t: "place", panel: "docked" }); })
     : ctl("❐", "Float as a card (restore down)", () => void floatCard());
-  return h("header", {},
+  return h("header", { class: ui.engaged ? "keys-on" : "" },
     h("div", { class: "title", title: s.hostOk ? "Recording · saved to disk" : "Recording · disk mirror not connected" },
       h("span", { class: `rec ${s.state.recording ? "" : "off"}` }),
       h("strong", {}, mainName()),
@@ -265,7 +272,9 @@ function body() {
           title: ui.openNodes.has(n.id) ? "Hide the pages (h)" : `Show the ${n.pages.length} pages (l)`,
           onclick: (e: Event) => { e.stopPropagation(); toggleNode(n.id); },
         }, `${ui.openNodes.has(n.id) ? "▾" : "▸"} ×${n.pages.length}`),
-        n.site && h("span", { class: "site" }, n.site));
+        n.site && h("span", { class: "site" }, n.site),
+        viaSites(n).length > 0 && h("span", { class: "via", title: ["Passed through on the way here:", ...n.via!.map(v => v.url)].join("\n") },
+          `via ${viaSites(n).join(" › ")}`));
       row.addEventListener("dblclick", () => openNode(n));
     }
     row.addEventListener("click", e => {
@@ -315,24 +324,36 @@ function branchList() {
 }
 
 function footerEl() { return h("footer", { id: "footer" }); }
-function renderFooter() {
+/** `typing`: the field had focus before a re-render (only then is focus put back). */
+function renderFooter(typing = false) {
   const f = document.getElementById("footer");
   if (!f) return;
   if (ui.mode === "find" || ui.mode === "renameBranch" || ui.mode === "renameNode") {
-    if (f.querySelector("input")) return; // keep the field (and its focus) while typing
+    if (f.contains(ui.input)) return; // keep the field (and its focus) while typing
     const isFind = ui.mode === "find";
-    const input = h("input", {
-      value: isFind ? ui.find.q : ui.mode === "renameBranch" ? (tree().branches[cursorBranch()!]?.name ?? "") : (cursorNode()?.name ?? ""),
-      placeholder: isFind ? "Find a branch or node…" : ui.mode === "renameBranch" ? "Branch name" : "Node name",
-      oninput: (e: Event) => { if (isFind) { ui.find.q = (e.target as HTMLInputElement).value; ui.find.sel = 0; runFind(); } },
-      onkeydown: (e: KeyboardEvent) => inputKey(e, input as HTMLInputElement),
-    }) as HTMLInputElement;
-    f.replaceChildren(h("span", {}, isFind ? "/" : "name:"), input);
-    input.focus();
-    input.select();
+    // re-renders (every page you visit, the drift check) reuse the field, so what you
+    // typed survives; it takes focus only when it already had it or was just opened
+    // here. Never steal focus from the page: that blocked typing in the browser.
+    const fresh = !ui.input || ui.input.dataset.mode !== ui.mode;
+    if (fresh) {
+      const input = h("input", {
+        value: isFind ? ui.find.q : renameValue(),
+        placeholder: isFind ? "Find a branch or node…" : ui.mode === "renameBranch" ? "Branch name" : "Node name",
+        oninput: (e: Event) => { if (isFind) { ui.find.q = (e.target as HTMLInputElement).value; ui.find.sel = 0; runFind(); } },
+        onkeydown: (e: KeyboardEvent) => inputKey(e, input as HTMLInputElement),
+      }) as HTMLInputElement;
+      input.dataset.mode = ui.mode;
+      ui.input = input;
+    }
+    f.replaceChildren(h("span", {}, isFind ? "/" : "name:"), ui.input!);
+    if ((fresh || typing) && document.hasFocus()) {
+      ui.input!.focus({ preventScroll: true });
+      if (fresh) ui.input!.select();
+    }
     if (isFind) runFind();
     return;
   }
+  ui.input = null;
   document.querySelector(".results")?.remove();
   const modeText: Partial<Record<Mode, string>> = {
     visual: "<b>VISUAL</b> j/k extend · <kbd>t</kbd> tangent · <kbd>p</kbd> tangent of… · <kbd>m</kbd> back to main · <kbd>n</kbd> new topic · <kbd>Esc</kbd>",
@@ -390,6 +411,7 @@ function overlay() {
   if (ui.mode === "help") {
     const k = (keys: string, what: string) => h("div", { innerHTML: `<kbd>${keys}</kbd> ${what}` });
     return wrap(h("div", { class: "dialog", style: "width:min(420px,94%)" }, h("h3", {}, "Keys"),
+      h("p", {}, "Keys work once you click the tree (or press Enter); a blue line under the header shows they're on. Click the page and they're off again, so typing in the browser is never a command."),
       h("div", { class: "help" },
         k("t", "new tangent from here"), k("u", "close tangent, up one level"), k("m", "back to main"), k("n", "new topic (main branch)"),
         k("b", "previous branch"), k("f", "jump to a branch by label"), k("/", "find branch or node"),
@@ -417,6 +439,7 @@ function openMode(m: Mode, hintFor: "goto" | "parent" = "goto") {
     ui.hintBuf = "";
   }
   if (m === "find") ui.find = { q: "", sel: 0, results: [] };
+  if (m === "renameBranch" || m === "renameNode") ui.renameTo = renameTarget(tree(), rowAt(), m === "renameNode" ? "node" : "branch");
   if (m === "sessions") ui.listSel = Math.max(0, ui.snap!.sessions.findIndex(s => s.id === ui.snap!.state.session));
   render();
 }
@@ -455,6 +478,12 @@ function pickFind() {
   if (branch !== t.current) goBranch(branch); else render();
 }
 
+function renameValue(): string {
+  const t = tree(), to = ui.renameTo;
+  if (!to) return "";
+  return ("branch" in to ? t.branches[to.branch]?.name : t.nodes[to.node]?.name) ?? "";
+}
+
 function inputKey(e: KeyboardEvent, input: HTMLInputElement) {
   e.stopPropagation();
   if (e.key === "Escape") { ui.mode = "normal"; render(); return; }
@@ -468,11 +497,11 @@ function inputKey(e: KeyboardEvent, input: HTMLInputElement) {
   if (e.key !== "Enter") return;
   if (ui.mode === "find") return pickFind();
   const name = input.value.trim();
-  const branch = cursorBranch(), node = cursorNode();
-  const which = ui.mode;
+  const target = ui.renameTo;
   ui.mode = "normal";
-  if (name && which === "renameBranch" && branch) act({ type: "renameBranch", branch, name });
-  if (name && which === "renameNode" && node) act({ type: "renameNode", node: node.id, name });
+  ui.renameTo = null;
+  if (name && target && "branch" in target) act({ type: "renameBranch", branch: target.branch, name });
+  if (name && target && "node" in target) act({ type: "renameNode", node: target.node, name });
   render();
 }
 
@@ -538,9 +567,39 @@ function scrollCursorIntoView() {
 }
 
 // --- keyboard ---------------------------------------------------------------------------------
+// Bare letters are commands here, so they must only act when you meant the panel:
+// focus can land in it by itself (Brave restoring the side panel, a new tab). Keys are
+// live for one focus session, and only if that session started with you: a click in the
+// panel, or opening it from the icon moments before. Focus that arrives any other way,
+// or an "engage" while the panel isn't focused, leaves them off.
+let pointerAt = 0, invitedAt = 0;
+addEventListener("pointerdown", () => { pointerAt = Date.now(); engage(true); }, true);
+addEventListener("focus", () => engage(Date.now() - pointerAt < 1000 || Date.now() - invitedAt < 3000));
+addEventListener("blur", () => engage(false));
+document.addEventListener("visibilitychange", () => { if (document.hidden) engage(false); });
+function invited() {
+  invitedAt = Date.now();
+  if (document.hasFocus()) engage(true); // otherwise the focus listener decides when it arrives
+}
+function engage(on: boolean) {
+  if (ui.engaged === on) return;
+  ui.engaged = on;
+  if (ui.snap) render();
+}
+
 document.addEventListener("keydown", e => {
-  if (!ui.snap || (e.target as HTMLElement).tagName === "INPUT") return;
+  const target = e.target as HTMLElement;
+  if (!ui.snap || target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
   const k = e.key;
+  const gate = keyGate(ui.engaged && document.hasFocus(), k, e.ctrlKey || e.altKey || e.metaKey);
+  if (gate !== "act") {
+    if (gate === "ignore") return;
+    e.preventDefault();
+    if (gate === "engage") { engage(true); return say("Keys on."); }
+    say("Keys paused (click the tree or press Enter to use them).", true);
+    if (bridge.mode === "float") window.parent.focus(); // the card hands typing back to the page
+    return;
+  }
   if (k === "Escape") {
     if (ui.mode !== "normal") { ui.mode = "normal"; ui.anchor = -1; ui.msg = ""; render(); }
     return;
@@ -591,8 +650,9 @@ document.addEventListener("keydown", e => {
     case "o": if (e.ctrlKey) { e.preventDefault(); return back(); } return;
     case "f": return openMode("hints");
     case "/": e.preventDefault(); return openMode("find");
-    case "r": return openMode("renameBranch");
-    case "e": case "R": return cursorNode() ? openMode("renameNode") : say("Put the cursor on a node first.", true);
+    // keys that open a text box: preventDefault, or the same key press types itself into it
+    case "r": e.preventDefault(); return openMode("renameBranch");
+    case "e": case "R": e.preventDefault(); return cursorNode() ? openMode("renameNode") : say("Put the cursor on a node first.", true);
     case "s": {
       const n = cursorNode(), r = rowAt();
       if (!n || n.pages.length < 2) return say("Nothing to split: this node has one page.", true);
@@ -629,4 +689,4 @@ document.addEventListener("keydown", e => {
   }
 });
 
-void bridge.start(s => { ui.snap = s; render(); });
+void bridge.start(s => { ui.snap = s; render(); }, invited);

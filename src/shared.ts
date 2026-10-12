@@ -39,6 +39,7 @@ export type Msg =
   | { t: "leaderKey"; key: string }
   | { t: "card?" }
   | { t: "canFloat?"; windowId?: number }
+  | { t: "engaged?"; windowId?: number }   // was the panel just opened by the person (icon)?
   | { t: "open"; windowId?: number; url: string }
   | { t: "history" }
   | { t: "deleteSessions"; ids: string[] };
@@ -47,7 +48,8 @@ export type Msg =
 export type TabMsg = { t: "card"; show: boolean } | { t: "arm" } | { t: "ping" };
 
 /** Background -> extension pages */
-export type Broadcast = { t: "snapshot"; snapshot: Snapshot } | { t: "close"; windowId: number };
+export type Broadcast = { t: "snapshot"; snapshot: Snapshot } | { t: "close"; windowId: number }
+  | { t: "engage"; windowId: number }; // the person opened the panel: its keys are live
 
 export const LEADER_KEYS: Record<string, Action | "back"> = {
   t: { type: "tangent" },

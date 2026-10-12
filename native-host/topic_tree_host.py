@@ -97,14 +97,17 @@ One file pair per browsing session (one tree per window-session).
 - `sessions/<session>.jsonl`: the raw event log, append-only, one JSON event per line, ordered by `seq`.
   - `{"kind":"search", "query", "engine", "url"}`: a web search
   - `{"kind":"page", "url", "title", "site", "fromSearch"?, "redirect"?}`: a page visit
-    (consecutive pages on one site group into one node; `redirect` rewrites the previous page)
+    (consecutive pages on one site group into one node; `redirect` means the page before was
+    only passed through; sign-in hops and "Redirecting…" pages fold into the next node's `via`)
+  - URLs are stored without secrets: sign-in pages keep origin + path only; OAuth codes,
+    tokens and SAML blobs are stripped from every URL before it is recorded
   - `{"kind":"action", "action":{"type": ...}}`: what the person did to the tree:
     `tangent` | `main` | `newMain` | `goto{branch}` | `renameBranch{branch,name}` |
     `renameNode{node,name}` | `split{node,page}` | `retro{nodes,to:"tangent"|"newMain"}`
   - every event has `id`, `session`, `seq`, `ts` (epoch ms), `source` ("browser")
 - `sessions/<session>.tree.json`: the derived tree after the latest event:
   `branches{id: {kind main|tangent, name?, parentBranch?, forkNode?, nodes[], returned}}`,
-  `nodes{id: {kind, title, name?, url?, site?, pages[{url,title,ts}], parent?, branch, ts}}`,
+  `nodes{id: {kind, title, name?, url?, site?, pages[{url,title,ts}], via?[{url,title,ts}], parent?, branch, ts}}`,
   `mains[]` (topics in order), `current`, `history[]` (branches left, newest last).
 
 The tree is a pure function of the log (`src/core/tree.ts` in the repo), so analysis can use either.
@@ -113,8 +116,9 @@ The tree is a pure function of the log (`src/core/tree.ts` in the repo), so anal
 
 def main() -> None:
     ROOT.mkdir(parents=True, exist_ok=True)
-    if not (ROOT / "README.md").exists():
-        (ROOT / "README.md").write_text(README, encoding="utf-8")
+    readme = ROOT / "README.md"
+    if not readme.exists() or readme.read_text(encoding="utf-8") != README:  # keep the schema notes current
+        readme.write_text(README, encoding="utf-8")
     while True:
         msg = read_message()
         if msg is None:

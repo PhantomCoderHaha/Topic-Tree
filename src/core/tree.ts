@@ -6,6 +6,7 @@
  * off a node of its parent branch and is expected to return. New nodes always go on
  * the current branch.
  */
+import { isHop } from "./capture";
 import type { Action, PageEvent, SearchEvent, TopicEvent } from "./events";
 
 export interface PageVisit { url: string; title: string; ts: number }
@@ -19,6 +20,7 @@ export interface TreeNode {
   site?: string;
   pages: PageVisit[];       // a page node keeps every consecutive page on its site
   parent?: string;          // the search a page was opened from
+  via?: PageVisit[];        // pass-through pages (sign-in, redirects) on the way here
   branch: string;
   ts: number;
 }
@@ -90,22 +92,56 @@ function push(t: Tree, node: TreeNode) {
 }
 
 function addSearch(t: Tree, e: SearchEvent) {
+  const via = absorbHops(t, e.ts, false);
   push(t, { id: newId("n", e.ts), kind: "search", title: e.query, url: e.url,
-            pages: [], branch: t.current, ts: e.ts });
+            pages: [], branch: t.current, ts: e.ts, ...(via.length && { via }) });
+}
+
+/**
+ * Pages only passed through on the way here (a sign-in chain, a "Redirecting…" page)
+ * are not part of the line of thought. Each shows up as a normal node at first, then
+ * the next arrival folds it away: the trailing pass-through visits of the last nodes
+ * come off and are returned (oldest first) to hang on the new node as `via`.
+ * `forced`: the recorder saw a client-side redirect, so the last visit is one regardless.
+ */
+function absorbHops(t: Tree, ts: number, forced: boolean, from?: string): PageVisit[] {
+  const via: PageVisit[] = [];
+  let next = ts;
+  for (;;) {
+    const last = t.lastNode ? t.nodes[t.lastNode] : undefined;
+    if (!last || last.kind !== "page" || last.branch !== t.current) break;
+    const visit = last.pages.at(-1)!;
+    // a redirect names the page it left; if the latest page is another tab's, it isn't that one
+    if (forced && from !== undefined && visit.url !== from) forced = false;
+    if (!(forced || isHop(visit.url, visit.title, next - visit.ts))) break;
+    forced = false;
+    via.unshift(visit);
+    next = visit.ts;
+    last.pages.pop();
+    if (last.pages.length) {
+      const top = last.pages.at(-1)!;
+      if (last.pages.length === 1) Object.assign(last, { title: top.title, url: top.url });
+      continue;
+    }
+    // nothing left of the node: it was only a hop. Keep it if something hangs off it.
+    if (Object.values(t.branches).some(b => b.forkNode === last.id)) { last.pages.push(via.shift()!); break; }
+    via.unshift(...(last.via ?? []));
+    const branch = t.branches[last.branch];
+    branch.nodes = branch.nodes.filter(id => id !== last.id);
+    delete t.nodes[last.id];
+    t.lastNode = branch.nodes.at(-1);
+  }
+  return via;
 }
 
 function addPage(t: Tree, e: PageEvent) {
   const visit = { url: e.url, title: e.title, ts: e.ts };
+  const via = absorbHops(t, e.ts, !!e.redirect, e.from);
   const last = t.lastNode ? t.nodes[t.lastNode] : undefined;
-  if (e.redirect && last?.kind === "page") {
-    // the page we just recorded only bounced here: rewrite it instead of adding a visit
-    Object.assign(last.pages[last.pages.length - 1], visit);
-    if (last.pages.length === 1) Object.assign(last, { title: e.title, url: e.url, site: e.site });
-    return;
-  }
   // consecutive pages on one site stay one node (until the person splits them)
   if (last && last.kind === "page" && last.site === e.site && last.branch === t.current && !e.fromSearch) {
     last.pages.push(visit);
+    if (via.length) last.via = [...(last.via ?? []), ...via];
     return;
   }
   const branch = t.branches[t.current];
@@ -113,7 +149,7 @@ function addPage(t: Tree, e: PageEvent) {
     ? [...branch.nodes].reverse().find(id => t.nodes[id].kind === "search")
     : undefined;
   push(t, { id: newId("n", e.ts), kind: "page", title: e.title, url: e.url, site: e.site,
-            pages: [visit], parent, branch: t.current, ts: e.ts });
+            pages: [visit], parent, branch: t.current, ts: e.ts, ...(via.length && { via }) });
 }
 
 // --- actions ------------------------------------------------------------------------

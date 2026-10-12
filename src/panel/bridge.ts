@@ -9,7 +9,8 @@ import { DEFAULT_SETTINGS, type Broadcast, type Msg, type PanelPlace, type Setti
 
 export interface Bridge {
   mode: "docked" | "float" | "preview";
-  start(onSnapshot: (s: Snapshot) => void): Promise<void>;
+  /** `onEngage`: the person opened the panel themselves, so its keys are live. */
+  start(onSnapshot: (s: Snapshot) => void, onEngage: () => void): Promise<void>;
   send(msg: Msg): Promise<void>;
   canFloat(): Promise<boolean>;
   openGuide(): void;
@@ -25,15 +26,17 @@ export function extensionBridge(mode: "docked" | "float"): Bridge {
   let push: (s: Snapshot) => void = () => {};
   return {
     mode,
-    async start(onSnapshot) {
+    async start(onSnapshot, onEngage) {
       push = onSnapshot;
       windowId = (await chrome.windows.getCurrent()).id;
       if (mode === "docked") chrome.runtime.connect({ name: `panel:${windowId}` });
       chrome.runtime.onMessage.addListener((m: Broadcast) => {
         if (m.t === "snapshot" && m.snapshot.windowId === windowId) push(m.snapshot);
         if (m.t === "close" && m.windowId === windowId && mode === "docked") window.close();
+        if (m.t === "engage" && m.windowId === windowId && mode === "docked") onEngage();
       });
       push(await chrome.runtime.sendMessage({ t: "get", windowId } satisfies Msg));
+      if (mode === "docked" && await chrome.runtime.sendMessage({ t: "engaged?", windowId } satisfies Msg)) onEngage();
     },
     async send(msg) {
       const reply = await chrome.runtime.sendMessage({ ...msg, windowId } as Msg);
@@ -98,7 +101,7 @@ export function previewBridge(): Bridge {
   };
   return {
     mode: "preview",
-    async start(on) { push = on; push(snap()); },
+    async start(on, onEngage) { push = on; push(snap()); onEngage(); }, // the preview page is the thing you opened
     async send(msg) {
       if (msg.t === "action") {
         const seq = (events.at(-1)?.seq ?? 0) + 1;

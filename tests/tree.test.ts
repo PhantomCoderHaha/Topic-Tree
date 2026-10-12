@@ -247,3 +247,101 @@ describe("uncommitted branches", () => {
     expect(t.mains).toHaveLength(1);
   });
 });
+
+describe("pass-through pages (sign-in chains, redirects)", () => {
+  const page = (seq: number, ts: number, url: string, title: string, extra: object = {}): TopicEvent => ({
+    id: `e${seq}`, session: "s", seq, ts, source: "browser", kind: "page", url, title,
+    site: new URL(url).hostname.replace(/^www\./, ""), ...extra });
+
+  it("folds a real-world university SSO chain into the LMS node as `via`", () => {
+    const t = replay("s", [
+      page(1, 0, "https://login.microsoftonline.com/tenant/saml2", "Redirecting"),
+      page(2, 800, "https://example-edu.access.mcas.ms/aad_login", "Continue"),
+      page(3, 5000, "https://lms.example.edu/ultra/stream", "Activity"),
+      page(4, 6300, "https://lms.example.edu/ultra/course", "Units"),
+    ]);
+    const nodes = t.branches[t.current].nodes.map(id => t.nodes[id]);
+    expect(nodes.map(n => [n.site, n.pages.length])).toEqual([["lms.example.edu", 2]]);
+    expect(nodes[0].via!.map(v => v.title)).toEqual(["Redirecting", "Continue"]);
+  });
+
+  it("is transitory: a hop is a node until the next page arrives", () => {
+    const evs = [page(1, 0, "https://login.microsoftonline.com/t/saml2", "Redirecting")];
+    expect(Object.values(replay("s", evs).nodes).map(n => n.site)).toEqual(["login.microsoftonline.com"]);
+  });
+
+  it("strips sign-in steps out of a grouped node and rejoins the site you came back to", () => {
+    const t = replay("s", [
+      page(1, 0, "https://lms.example.edu/ultra/stream", "Activity"),
+      page(2, 1000, "https://login.microsoftonline.com/t/oauth2/authorize", "Sign in to your account"),
+      page(3, 30000, "https://lms.example.edu/ultra/course", "Units"),
+    ]);
+    const nodes = Object.values(t.nodes);
+    expect(nodes.map(n => n.pages.length)).toEqual([2]);
+    expect(nodes[0].via!.length).toBe(1);
+  });
+
+  it("keeps a quick page that is not a sign-in step (fast clicking is real reading)", () => {
+    const t = replay("s", [
+      page(1, 0, "https://github.com/dashboard", "GitHub Dashboard"),
+      page(2, 2500, "https://wiki.org/qualia", "Qualia"),
+    ]);
+    expect(Object.values(t.nodes).map(n => n.via)).toEqual([undefined, undefined]);
+  });
+
+  it("keeps a bounce-titled page when you stayed on it", () => {
+    const t = replay("s", [
+      page(1, 0, "https://blog.example/continue-reading", "Continue reading: part 2"),
+      page(2, 60_000, "https://wiki.org/x", "X"),
+    ]);
+    expect(Object.keys(t.nodes).length).toBe(2);
+  });
+
+  it("a redirect only folds the page it left in its own tab, never another tab's", () => {
+    const t = replay("s", [
+      page(1, 0, "https://google.com/x", "Bounce"),
+      page(2, 300, "https://en.wikipedia.org/wiki/Tree", "Tree (other tab)"),
+      page(3, 600, "https://google.com/sorry", "Sorry", { redirect: true, from: "https://google.com/x" }),
+    ]);
+    expect(Object.values(t.nodes).map(n => n.title)).toEqual(["Bounce", "Tree (other tab)", "Sorry"]);
+    expect(Object.values(t.nodes).every(n => !n.via)).toBe(true);
+  });
+
+  it("a redirect naming the latest page folds it", () => {
+    const t = replay("s", [
+      page(1, 0, "https://a.com/x", "Article"),
+      page(2, 400, "https://b.com/y", "Other", { redirect: true, from: "https://a.com/x" }),
+    ]);
+    expect(Object.values(t.nodes).map(n => [n.site, n.via?.length])).toEqual([["b.com", 1]]);
+  });
+
+  it("a recorder-flagged redirect folds the previous page whatever it looks like", () => {
+    const t = replay("s", [
+      page(1, 0, "https://a.com/x", "Article"),
+      page(2, 400, "https://b.com/y", "Other", { redirect: true }),
+    ]);
+    const nodes = Object.values(t.nodes);
+    expect(nodes.map(n => n.site)).toEqual(["b.com"]);
+    expect(nodes[0].via![0].url).toBe("https://a.com/x");
+  });
+});
+
+import { serial } from "../src/core/serial";
+describe("serial: recorder writes never overlap", () => {
+  it("runs overlapping read-modify-write jobs in call order, so none is lost", async () => {
+    // the race it prevents: read shared state, await, write it back
+    let state: number[] = [];
+    const tick = () => new Promise(r => setTimeout(r, Math.random() * 5));
+    const write = async (n: number) => { const base = state; await tick(); state = [...base, n]; };
+    const q = serial();
+    await Promise.all([1, 2, 3, 4, 5].map(n => q(() => write(n))));
+    expect(state).toEqual([1, 2, 3, 4, 5]);
+  });
+  it("a failing job doesn't block the next", async () => {
+    const q = serial();
+    const errors = console.error; console.error = () => {};
+    await expect(q(() => Promise.reject(new Error("x")))).rejects.toThrow("x");
+    await expect(q(async () => 7)).resolves.toBe(7);
+    console.error = errors;
+  });
+});

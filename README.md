@@ -71,6 +71,10 @@ card in `brave://extensions`. Your sessions are kept.
 | `l` / `h` | unfold / fold (tangents, and ×N site nodes) |
 | `?` | all keys |
 
+Keys work once you **click the panel** (or press `Enter`, or open it from the toolbar icon): a blue
+line under the header shows they're on. Click the page and they're off, so typing in the browser
+never turns into tree commands.
+
 **Go back to anything:** double-click a node (or select it and press `Enter`) to reopen that search or
 website. Reopening isn't recorded, so it doesn't clutter the tree.
 
@@ -91,7 +95,9 @@ Panel buttons: **?** guide · **☰** sessions & history · **⚙** settings · 
 Topic Tree needs to see the pages you visit in order to draw the tree, so the browser will show
 broad permissions when you load it. All data stays in the browser's local storage and, if you
 enable it, in files on your own computer. There are no servers, no analytics and no network
-requests. Click **✕** to stop recording a session, or delete sessions in **☰ → Manage history…**.
+requests. URLs are stored without secrets: sign-in pages keep only their address without the query,
+and login codes, tokens and SAML data are stripped from every URL. Sign-in and redirect pages fold
+into the page they led to ("via …") instead of cluttering the tree. Click **✕** to stop recording a session, or delete sessions in **☰ → Manage history…**.
 
 ## Building from source
 

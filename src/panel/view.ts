@@ -85,6 +85,29 @@ export function buildView(t: Tree, collapsed: Set<string>, openNodes: Set<string
   return { rows, layout: l, edges: l.edges, yOf: row => yIndex.get(row) ?? 0 };
 }
 
+/**
+ * What a rename box is for, fixed when it opens: the cursor follows new pages, so
+ * reading it again at Enter would rename whatever arrived while you were typing.
+ * A page row names its node; any row names its branch; no row names the current branch.
+ */
+export function renameTarget(t: Tree, row: DisplayRow | undefined, kind: "branch" | "node"):
+    { branch: string } | { node: string } | null {
+  if (kind === "node") return row?.kind === "node" || row?.kind === "page" ? { node: row.node } : null;
+  return { branch: row ? row.branch : t.current };
+}
+
+/**
+ * What a key press in the panel does. Until you engage the panel (click it, press
+ * Enter, or open it from the icon) letters are not commands: focus that arrived by
+ * itself must not turn your typing into tree actions. Modifier combos pass through.
+ */
+export function keyGate(engaged: boolean, key: string, modifier: boolean): "act" | "engage" | "hint" | "ignore" {
+  if (engaged) return "act";
+  if (modifier) return "ignore";
+  if (key === "Enter") return "engage";
+  return key.length === 1 || key.startsWith("Arrow") ? "hint" : "ignore";
+}
+
 /** Labels for hint mode: home row first, then two-letter combinations. */
 export function hintLabels(n: number): string[] {
   const keys = "asdfghjklqwertyuiopzxcvbnm".split("");

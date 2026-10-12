@@ -105,3 +105,57 @@ describe("unfolded site nodes", () => {
     expect(search.kind === "node" && v.yOf(search.layoutRow)).toBe(4);
   });
 });
+
+import { cleanUrl, hopKind } from "../src/core/capture";
+describe("capture hygiene", () => {
+  it("stores sign-in pages without their query (SAML blobs, one-time codes)", () => {
+    expect(cleanUrl("https://login.microsoftonline.com/t/saml2?SAMLRequest=abc&RelayState=x&Signature=y"))
+      .toBe("https://login.microsoftonline.com/t/saml2");
+  });
+  it("strips OAuth codes, tokens and credentials from any page but keeps normal params", () => {
+    expect(cleanUrl("https://app.example/cb?code=SECRET&state=s&tab=2")).toBe("https://app.example/cb?tab=2");
+    expect(cleanUrl("https://app.example/#access_token=SECRET&x=1")).toBe("https://app.example/");
+    expect(cleanUrl("https://user:pw@site.org/a?q=1")).toBe("https://site.org/a?q=1");
+    expect(cleanUrl("https://wiki.org/a#History")).toBe("https://wiki.org/a#History");
+  });
+  it("classifies hops", () => {
+    expect(hopKind("https://example-edu.access.mcas.ms/aad_login", "Continue")).toBe("auth");
+    expect(hopKind("https://site.org/x", "Redirecting...")).toBe("bounce");
+    expect(hopKind("https://wiki.org/qualia", "Qualia")).toBe(null);
+  });
+});
+
+import { keyGate } from "../src/panel/view";
+describe("keyGate: letters are commands only once you've engaged the panel", () => {
+  it("acts on everything when engaged", () => {
+    expect(keyGate(true, "r", false)).toBe("act");
+    expect(keyGate(true, "Escape", false)).toBe("act");
+  });
+  it("turns stray letters into a hint, never a command", () => {
+    for (const k of ["r", "e", "t", "n", "j", "ArrowDown"]) expect(keyGate(false, k, false)).toBe("hint");
+  });
+  it("Enter engages; modifiers and other keys pass through untouched", () => {
+    expect(keyGate(false, "Enter", false)).toBe("engage");
+    expect(keyGate(false, "o", true)).toBe("ignore");
+    expect(keyGate(false, "Tab", false)).toBe("ignore");
+  });
+});
+
+import { renameTarget } from "../src/panel/view";
+describe("renameTarget: fixed when the box opens", () => {
+  const t = replay("s", [
+    { id: "e1", session: "s", seq: 1, ts: 1, source: "browser", kind: "page", url: "https://a.com/x", title: "A", site: "a.com" },
+    { id: "e2", session: "s", seq: 2, ts: 2, source: "browser", kind: "action", action: { type: "tangent" } },
+    { id: "e3", session: "s", seq: 3, ts: 3, source: "browser", kind: "page", url: "https://b.com/y", title: "B", site: "b.com" },
+  ]);
+  const v = buildView(t, new Set());
+  const rowA = v.rows.find(r => r.kind === "node" && t.nodes[r.node].title === "A");
+  it("names the node under the cursor, and the branch of that row", () => {
+    expect(renameTarget(t, rowA, "node")).toEqual({ node: (rowA as { node: string }).node });
+    expect(renameTarget(t, rowA, "branch")).toEqual({ branch: t.mains[0] });
+  });
+  it("with no row: the current branch, and no node", () => {
+    expect(renameTarget(t, undefined, "branch")).toEqual({ branch: t.current });
+    expect(renameTarget(t, undefined, "node")).toBeNull();
+  });
+});
