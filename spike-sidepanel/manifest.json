@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Topic Tree spike: side panel",
+  "version": "0.0.1",
+  "description": "Throwaway check: does Brave dock an extension side panel, and on which side?",
+  "permissions": ["sidePanel"],
+  "side_panel": { "default_path": "panel.html" },
+  "action": { "default_title": "Open Topic Tree spike panel" },
+  "background": { "service_worker": "background.js" }
+}
