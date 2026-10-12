@@ -23,7 +23,7 @@ export function layout(t: Tree): Layout {
   // colours: mains cycle from palette[0]; each tangent gets the next colour
   const colourOf = new Map<string, string>();
   let c = 1;
-  for (const b of Object.values(t.branches).sort((x, y) => x.createdTs - y.createdTs || (x.id < y.id ? -1 : 1)))
+  for (const b of Object.values(t.branches).sort((x, y) => x.born - y.born || (x.id < y.id ? -1 : 1)))
     colourOf.set(b.id, b.kind === "main" ? PALETTE[0] : PALETTE[c++ % PALETTE.length || 1]);
 
   // spans: a tangent occupies its lane from its fork row to its last node

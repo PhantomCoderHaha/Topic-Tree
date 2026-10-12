@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Topic Tree",
+  "version": "0.1.0",
+  "description": "Keeps your main line of thought visible while you research: a git-style tree of searches, pages and tangents.",
+  "minimum_chrome_version": "116",
+  "permissions": ["sidePanel", "storage", "unlimitedStorage", "webNavigation", "tabs", "alarms", "nativeMessaging"],
+  "side_panel": { "default_path": "panel.html" },
+  "action": { "default_title": "Topic Tree", "default_icon": { "16": "icon16.png", "32": "icon32.png", "48": "icon48.png", "128": "icon128.png" } },
+  "icons": { "16": "icon16.png", "32": "icon32.png", "48": "icon48.png", "128": "icon128.png" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [{ "matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "run_at": "document_idle" }],
+  "web_accessible_resources": [{ "resources": ["panel.html", "panel.js", "panel.css"], "matches": ["http://*/*", "https://*/*"] }],
+  "commands": {
+    "leader": {
+      "suggested_key": { "default": "Ctrl+Shift+Y" },
+      "description": "Tree action on this page: then press t (tangent), m (main), M (new topic) or b (previous branch)"
+    }
+  }
+}

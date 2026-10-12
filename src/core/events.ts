@@ -28,6 +28,7 @@ export interface PageEvent extends Base {
   title: string;
   site: string;          // hostname without "www."
   fromSearch?: boolean;  // opened from a search results page: hangs under that search
+  redirect?: boolean;    // a client-side redirect: replaces the page just recorded
 }
 
 /** Something the person did to the tree. */

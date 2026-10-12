@@ -32,6 +32,7 @@ export interface Branch {
   nodes: string[];
   returned: boolean;        // a tangent the person came back from
   createdTs: number;
+  born: number;             // seq of the event that created it: stable order for colours
 }
 
 export interface Tree {
@@ -54,7 +55,7 @@ export function emptyTree(session: string, ts = 0): Tree {
   const id = `b-main-0`;
   return {
     session,
-    branches: { [id]: { id, kind: "main", nodes: [], returned: false, createdTs: ts } },
+    branches: { [id]: { id, kind: "main", nodes: [], returned: false, createdTs: ts, born: 0 } },
     nodes: {},
     mains: [id],
     current: id,
@@ -96,6 +97,12 @@ function addSearch(t: Tree, e: SearchEvent) {
 function addPage(t: Tree, e: PageEvent) {
   const visit = { url: e.url, title: e.title, ts: e.ts };
   const last = t.lastNode ? t.nodes[t.lastNode] : undefined;
+  if (e.redirect && last?.kind === "page") {
+    // the page we just recorded only bounced here: rewrite it instead of adding a visit
+    Object.assign(last.pages[last.pages.length - 1], visit);
+    if (last.pages.length === 1) Object.assign(last, { title: e.title, url: e.url, site: e.site });
+    return;
+  }
   // consecutive pages on one site stay one node (until the person splits them)
   if (last && last.kind === "page" && last.site === e.site && last.branch === t.current && !e.fromSearch) {
     last.pages.push(visit);
@@ -126,7 +133,7 @@ export function mainOf(t: Tree, branch: string): string {
 function newBranch(t: Tree, kind: Branch["kind"], ts: number, from?: string): Branch {
   const parent = from ? t.branches[from] : undefined;
   const b: Branch = {
-    id: newId(kind === "main" ? "b-main-" : "b-tan-", ts), kind, nodes: [], returned: false, createdTs: ts,
+    id: newId(kind === "main" ? "b-main-" : "b-tan-", ts), kind, nodes: [], returned: false, createdTs: ts, born: t.seq,
     ...(parent && { parentBranch: parent.id, forkNode: parent.nodes.at(-1) }),
   };
   t.branches[b.id] = b;
@@ -194,8 +201,8 @@ function retro(t: Tree, ids: string[], to: "tangent" | "newMain", ts: number) {
 
   const b: Branch = to === "tangent"
     ? { id: newId("b-tan-", ts), kind: "tangent", parentBranch: from.id,
-        forkNode: from.nodes[idx[0] - 1], nodes: run, returned: !isTail, createdTs: t.nodes[run[0]].ts }
-    : { id: newId("b-main-", ts), kind: "main", nodes: run, returned: false, createdTs: t.nodes[run[0]].ts };
+        forkNode: from.nodes[idx[0] - 1], nodes: run, returned: !isTail, createdTs: t.nodes[run[0]].ts, born: t.seq }
+    : { id: newId("b-main-", ts), kind: "main", nodes: run, returned: false, createdTs: t.nodes[run[0]].ts, born: t.seq };
   t.branches[b.id] = b;
   if (to === "newMain") t.mains.splice(t.mains.indexOf(mainOf(t, from.id)) + 1, 0, b.id);
   from.nodes.splice(idx[0], ids.length);
