@@ -15,7 +15,7 @@
   "commands": {
     "leader": {
       "suggested_key": { "default": "Ctrl+Shift+Y" },
-      "description": "Tree action on this page: then press t (tangent), u (up a level), m (main), M (new topic) or b (previous branch)"
+      "description": "Tree action on this page: then press t (tangent), u (up a level), m (main), n (new topic) or b (previous branch)"
     }
   }
 }

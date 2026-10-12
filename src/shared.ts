@@ -51,6 +51,7 @@ export const LEADER_KEYS: Record<string, Action | "back"> = {
   t: { type: "tangent" },
   m: { type: "main" },
   u: { type: "up" },
+  n: { type: "newMain" },
   M: { type: "newMain" },
   b: "back",
 };

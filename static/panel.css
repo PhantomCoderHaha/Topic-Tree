@@ -51,6 +51,7 @@ header { display: flex; align-items: center; gap: 6px; padding: 8px 6px 8px 12px
   max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .row .topic { font-size: 11px; color: var(--dim); border: 1px solid var(--line); padding: 0 6px; border-radius: 9px; flex: none; }
 .row.chip { color: var(--dim); }
+.row.pending .label { font-style: italic; opacity: .85; }
 .row.chip .label::before { content: "↳ "; }
 .hint { font: 600 11px/1 Consolas, monospace; background: var(--warn); color: #111; border-radius: 3px; padding: 2px 4px; flex: none; }
 .empty { color: var(--dim); padding: 24px 16px; line-height: 1.6; }

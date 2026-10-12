@@ -14,7 +14,8 @@ export interface Edge { from: [number, number]; to: [number, number]; colour: st
                         kind: "line" | "fork" | "merge" }
 export interface BranchMark { branch: string; lane: number; firstRow: number; lastRow: number;
                               colour: string; kind: "main" | "tangent"; topicBreak: boolean }
-export interface Layout { rows: Row[]; edges: Edge[]; branches: BranchMark[]; lanes: number }
+export interface Layout { rows: Row[]; edges: Edge[]; branches: BranchMark[]; lanes: number;
+                          colours: Record<string, string> } // every branch, empty ones included
 
 export function layout(t: Tree): Layout {
   const order = Object.values(t.nodes).sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
@@ -72,5 +73,6 @@ export function layout(t: Tree): Layout {
     marks.push({ branch: b.id, lane: laneOf.get(b.id) ?? 0, firstRow: Math.min(...rs), lastRow: Math.max(...rs),
                  colour, kind: b.kind, topicBreak: b.kind === "main" && t.mains.indexOf(b.id) > 0 });
   }
-  return { rows, edges, branches: marks, lanes: Math.max(1, ...[...laneOf.values()].map(l => l + 1)) };
+  return { rows, edges, branches: marks, lanes: Math.max(1, ...[...laneOf.values()].map(l => l + 1)),
+           colours: Object.fromEntries(colourOf) };
 }

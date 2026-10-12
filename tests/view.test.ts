@@ -33,7 +33,8 @@ describe("compact view", () => {
   it("collapses returned tangents into one chip right after their fork node", () => {
     const t = run("a", { type: "tangent" }, "b", "c", { type: "main" }, "d");
     const v = buildView(t, defaultCollapsed(t, new Set()));
-    expect(v.rows.map(r => r.kind === "node" ? t.nodes[r.node].title : `chip:${r.count}`)).toEqual(["a", "chip:2", "d"]);
+    expect(v.rows.map(r => r.kind === "node" ? t.nodes[r.node].title : r.kind === "chip" ? `chip:${r.count}` : r.kind))
+      .toEqual(["a", "chip:2", "d"]);
   });
   it("keeps the tangent you're in expanded, and an expanded one stays open", () => {
     const t = run("a", { type: "tangent" }, "b");
@@ -66,5 +67,20 @@ describe("keyboard helpers", () => {
     expect(fuzzy("consc", "consciousness")).toBeGreaterThan(fuzzy("cns", "consciousness"));
     expect(fuzzy("cns", "consciousness")).toBeGreaterThan(0);
     expect(fuzzy("xyz", "consciousness")).toBe(-1);
+  });
+});
+
+describe("just-started branches", () => {
+  it("shows a placeholder where the next node of an empty new tangent will go, forking from here", () => {
+    const t = run("a", { type: "tangent" });
+    const last = buildView(t, new Set()).rows.at(-1)!;
+    expect(last.kind).toBe("pending");
+    expect(last.kind === "pending" && [last.branchKind, last.forkRow, last.lane]).toEqual(["tangent", 0, 1]);
+  });
+  it("shows one for an empty new topic, and none once it has a node", () => {
+    const empty = run("a", { type: "newMain" });
+    const row = buildView(empty, new Set()).rows.at(-1)!;
+    expect(row.kind === "pending" && row.branchKind).toBe("main");
+    expect(buildView(run("a", { type: "newMain" }, "b"), new Set()).rows.some(r => r.kind === "pending")).toBe(false);
   });
 });

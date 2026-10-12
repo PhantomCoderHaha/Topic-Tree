@@ -194,3 +194,25 @@ describe("retro back to main", () => {
     expect(titles(t, t.mains[0])).toEqual(["a", "b"]);
   });
 });
+
+describe("retro tangent of a chosen parent", () => {
+  // the screenshot case: main a b, tangent X off b, back on main, then "c" should be a tangent of X
+  it("nests the run under the chosen branch, forking off its last node before the run", () => {
+    const t = run("q:a", "q:b", { type: "tangent" }, "q:x", { type: "main" }, "q:c");
+    const x = Object.values(t.branches).find(b => b.kind === "tangent")!;
+    const after = apply(t, { id: "z", session: "s", seq: 50, ts: 50e3, source: "browser", kind: "action",
+                             action: { type: "retro", nodes: ["ne6"], to: "tangent", parent: x.id } });
+    const nested = Object.values(after.branches).find(b => b.kind === "tangent" && b.id !== x.id)!;
+    expect(nested.parentBranch).toBe(x.id);
+    expect(nested.forkNode).toBe("ne4");
+    expect(titles(after, nested.id)).toEqual(["c"]);
+    expect(titles(after, after.mains[0])).toEqual(["a", "b"]);
+  });
+  it("refuses a parent that hangs off the selected nodes (would be a loop)", () => {
+    const t = run("q:a", "q:b", { type: "tangent" }, "q:x", { type: "main" });
+    const x = Object.values(t.branches).find(b => b.kind === "tangent")!;
+    const after = apply(t, { id: "z", session: "s", seq: 50, ts: 50e3, source: "browser", kind: "action",
+                             action: { type: "retro", nodes: ["ne2"], to: "tangent", parent: x.id } });
+    expect(titles(after, after.mains[0])).toEqual(["a", "b"]);
+  });
+});

@@ -53,9 +53,9 @@ const SCENES: Scene[] = [
     note: "When a tangent passes the steps or minutes set in ⚙, a banner offers the way back: <b>Return</b> (<kbd>m</kbd>) or <b>Keep going</b>. A tangent of a tangent takes another lane." },
   { title: "7. A completely new topic",
     did: "Back on sleep, you're done. Later you start researching something unrelated.",
-    keys: "<kbd>m</kbd> then <kbd>M</kbd>",
+    keys: "<kbd>m</kbd> then <kbd>n</kbd>",
     steps: [{ type: "main" }, { type: "newMain" }, "q:how to learn touch typing", "p:keybr.com|Typing practice"],
-    note: "<kbd>M</kbd> starts a new main branch, marked <b>new topic</b>. Jump between branches with <kbd>f</kbd> (letter labels) or <kbd>/</kbd> (find by name), and name a branch with <kbd>r</kbd>." },
+    note: "<kbd>n</kbd> starts a new main branch, marked <b>new topic</b>. Jump between branches with <kbd>f</kbd> (letter labels) or <kbd>/</kbd> (find by name), and name a branch with <kbd>r</kbd>." },
 ];
 
 // --- build each scene's tree --------------------------------------------------------
@@ -122,6 +122,7 @@ function panel(t: Tree, scene: Scene, previous: Set<string>): HTMLElement {
   }
   const headNode = cur.nodes.at(-1);
   v.rows.forEach((r, i) => {
+    if (r.kind === "pending") return; // the example never ends on a just-started, empty branch
     const [x, y] = [X0 + r.lane * LANE, i * ROW + ROW / 2];
     const row = el("div", "mock-row");
     row.style.paddingLeft = `${gutter}px`;

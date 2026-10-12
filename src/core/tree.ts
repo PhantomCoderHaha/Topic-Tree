@@ -177,7 +177,7 @@ function act(t: Tree, a: Action, ts: number) {
       split(t, a.node, a.page);
       break;
     case "retro":
-      retro(t, a.nodes, a.to, ts);
+      retro(t, a.nodes, a.to, ts, a.parent);
       break;
   }
 }
@@ -197,7 +197,7 @@ function split(t: Tree, nodeId: string, page: number) {
 
 /** Re-mark a contiguous run of one branch's nodes as a tangent (it forked off the
  *  node before the run) or as a new main branch (a topic shift). */
-function retro(t: Tree, ids: string[], to: "tangent" | "newMain" | "main", ts: number) {
+function retro(t: Tree, ids: string[], to: "tangent" | "newMain" | "main", ts: number, parentId?: string) {
   if (!ids.length || !t.nodes[ids[0]]) return;
   const from = t.branches[t.nodes[ids[0]].branch];
   const idx = ids.map(id => from.nodes.indexOf(id)).sort((x, y) => x - y);
@@ -207,9 +207,19 @@ function retro(t: Tree, ids: string[], to: "tangent" | "newMain" | "main", ts: n
   const run = from.nodes.slice(idx[0], idx[0] + ids.length);
   const isTail = idx[0] + ids.length === from.nodes.length;
 
+  // default parent: the run's own branch, forking off the node before the run;
+  // a chosen parent: fork off that branch's last node visited before the run
+  const parent = parentId && parentId !== from.id ? t.branches[parentId] : from;
+  if (!parent) return;
+  if (parent !== from && (parent.forkNode && run.includes(parent.forkNode) || isInside(t, parent.id, from.id, run)))
+    return; // the chosen parent hangs off these very nodes: it can't also be their parent
+  const startTs = t.nodes[run[0]].ts;
+  const forkNode = parent === from ? from.nodes[idx[0] - 1]
+    : [...parent.nodes].reverse().find(id => t.nodes[id].ts <= startTs);
+
   const b: Branch = to === "tangent"
-    ? { id: newId("b-tan-", ts), kind: "tangent", parentBranch: from.id,
-        forkNode: from.nodes[idx[0] - 1], nodes: run, returned: !isTail, createdTs: t.nodes[run[0]].ts, born: t.seq }
+    ? { id: newId("b-tan-", ts), kind: "tangent", parentBranch: parent.id,
+        forkNode, nodes: run, returned: !isTail, createdTs: startTs, born: t.seq }
     : { id: newId("b-main-", ts), kind: "main", nodes: run, returned: false, createdTs: t.nodes[run[0]].ts, born: t.seq };
   t.branches[b.id] = b;
   if (to === "newMain") t.mains.splice(t.mains.indexOf(mainOf(t, from.id)) + 1, 0, b.id);
@@ -220,6 +230,14 @@ function retro(t: Tree, ids: string[], to: "tangent" | "newMain" | "main", ts: n
     if (other.kind === "tangent" && other.forkNode && run.includes(other.forkNode)) other.parentBranch = b.id;
   // still working at the end of the run: carry on in the re-marked branch
   if (isTail && t.current === from.id) goTo(t, b.id);
+}
+
+/** Does `branch` (transitively) fork off one of `run`'s nodes? */
+function isInside(t: Tree, branch: string, _from: string, run: string[]): boolean {
+  for (let b = t.branches[branch]; b?.parentBranch; b = t.branches[b.parentBranch]) {
+    if (b.forkNode && run.includes(b.forkNode)) return true;
+  }
+  return false;
 }
 
 /** Undo a tangent mark: move a run of a tangent's nodes back onto its main branch, in

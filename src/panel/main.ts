@@ -28,6 +28,8 @@ const ui = {
   expanded: new Set<string>(),
   collapsed: new Set<string>(),
   hints: new Map<string, string>(),   // label -> branch
+  hintFor: "goto" as "goto" | "parent", // f jumps; v … p picks the parent of a new tangent
+  pickNodes: [] as string[],          // the selected run waiting for its parent
   hintBuf: "",
   find: { q: "", sel: 0, results: [] as Array<{ kind: "branch" | "node"; id: string; text: string }> },
   listSel: 0,
@@ -74,7 +76,17 @@ function mainName(): string {
 }
 
 // --- actions ------------------------------------------------------------------------------
-const act = (action: Action) => { ui.stick = true; void bridge.send({ t: "action", action }); };
+const DONE: Partial<Record<Action["type"], string>> = {
+  tangent: "Tangent started: your next page goes on it.",
+  newMain: "New topic started: your next search goes on it.",
+  main: "Back on the main branch.",
+  up: "Up one level.",
+};
+const act = (action: Action) => {
+  ui.stick = true;
+  void bridge.send({ t: "action", action }).then(() => { const m = DONE[action.type]; if (m) say(m); });
+};
+const rowKey = (r: DisplayRow) => r.kind === "node" ? r.node : `${r.kind}:${r.branch}`;
 const send = (m: Msg) => void bridge.send(m);
 function say(text: string, err = false) { ui.msg = text; ui.err = err; renderFooter(); }
 
@@ -113,7 +125,7 @@ function render() {
 
 function placeCursor() {
   const rows = ui.view!.rows;
-  const key = (r: DisplayRow) => r.kind === "node" ? r.node : `chip:${r.branch}`;
+  const key = rowKey;
   if (ui.stick || ui.cursor < 0) {
     // follow the newest node of the current branch
     const cur = tree().branches[tree().current].nodes.at(-1);
@@ -201,7 +213,17 @@ function body() {
   v.rows.forEach((r, i) => {
     const [x, y] = [X0 + r.lane * LANE, i * ROW + ROW / 2];
     let row: HTMLElement;
-    if (r.kind === "chip") {
+    if (r.kind === "pending") {
+      if (r.forkRow !== undefined) {
+        const [fx, fy] = [X0 + (r.forkLane ?? 0) * LANE, r.forkRow * ROW + ROW / 2];
+        g.append(svg("path", { d: edgePath(fx, fy, x, y, "fork", ROW), stroke: r.colour, "stroke-width": 2, fill: "none",
+                               "stroke-dasharray": "3 3", opacity: 0.7 }));
+      }
+      g.append(svg("circle", { cx: x, cy: y, r: 5, fill: "var(--bg)", stroke: r.colour, "stroke-width": 2, "stroke-dasharray": "3 2" }));
+      row = h("div", { class: "row pending", style: `padding-left:${gutter}px` },
+        h("span", { class: "label", style: `color:${r.colour}` },
+          r.branchKind === "main" ? "New topic: your next search goes here" : "Tangent started: your next page goes here"));
+    } else if (r.kind === "chip") {
       g.append(svg("circle", { cx: x, cy: y, r: 3.5, fill: "var(--bg)", stroke: r.colour, "stroke-width": 1.5,
                                "stroke-dasharray": "2 2" }));
       row = h("div", { class: "row chip", style: `padding-left:${gutter}px` },
@@ -232,7 +254,7 @@ function body() {
       if ((e as MouseEvent).shiftKey && r.kind === "node") { ui.anchor = ui.anchor < 0 ? ui.cursor : ui.anchor; ui.mode = "visual"; }
       ui.stick = false;
       ui.cursor = i;
-      ui.cursorKey = r.kind === "node" ? r.node : `chip:${r.branch}`;
+      ui.cursorKey = rowKey(r);
       render();
     });
     if (i === ui.cursor) row.classList.add("cursor");
@@ -295,13 +317,13 @@ function renderFooter() {
   }
   document.querySelector(".results")?.remove();
   const modeText: Partial<Record<Mode, string>> = {
-    visual: "<b>VISUAL</b> j/k extend · <kbd>t</kbd> tangent · <kbd>m</kbd> back to main · <kbd>M</kbd> new topic · <kbd>Esc</kbd>",
+    visual: "<b>VISUAL</b> j/k extend · <kbd>t</kbd> tangent · <kbd>p</kbd> tangent of… · <kbd>m</kbd> back to main · <kbd>n</kbd> new topic · <kbd>Esc</kbd>",
     hints: "Type the label of a branch · <kbd>Esc</kbd>",
   };
   f.replaceChildren(h("span", {
     class: `msg ${ui.err ? "err" : ""}`,
     innerHTML: ui.msg ? escapeHtml(ui.msg) : modeText[ui.mode]
-      ?? "<kbd>t</kbd> tangent · <kbd>u</kbd> up · <kbd>m</kbd> main · <kbd>M</kbd> new topic · <kbd>f</kbd> jump · <kbd>?</kbd> keys",
+      ?? "<kbd>t</kbd> tangent · <kbd>u</kbd> up · <kbd>m</kbd> main · <kbd>n</kbd> new topic · <kbd>f</kbd> jump · <kbd>?</kbd> keys",
   }));
 }
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
@@ -350,12 +372,12 @@ function overlay() {
     const k = (keys: string, what: string) => h("div", { innerHTML: `<kbd>${keys}</kbd> ${what}` });
     return wrap(h("div", { class: "dialog", style: "width:min(420px,94%)" }, h("h3", {}, "Keys"),
       h("div", { class: "help" },
-        k("t", "new tangent from here"), k("u", "close tangent, up one level"), k("m", "back to main"), k("M", "new topic (main branch)"),
+        k("t", "new tangent from here"), k("u", "close tangent, up one level"), k("m", "back to main"), k("n", "new topic (main branch)"),
         k("b", "previous branch"), k("f", "jump to a branch by label"), k("/", "find branch or node"),
         k("j k", "move"), k("g G", "top / bottom"), k("h l", "collapse / expand"),
-        k("r", "name branch"), k("R", "name node"), k("s", "split last page into its own node"),
-        k("v", "select past nodes → t / m / M"), k("z", "branch view"), k("Enter", "open page"),
-        k("Ctrl+Shift+Y", "from any page: then t u m M b")),
+        k("r", "name branch"), k("e", "name node"), k("s", "split last page into its own node"),
+        k("v", "select past nodes → t / p / m / n"), k("z", "branch view"), k("Enter", "open page"),
+        k("Ctrl+Shift+Y", "from any page: then t u m n b")),
       h("div", { class: "actions", style: "margin-top:12px" },
         h("button", { class: "btn", onclick: () => bridge.openGuide() }, "Full guide"),
         h("button", { class: "btn", onclick: close }, "Close"))));
@@ -364,9 +386,10 @@ function overlay() {
 }
 
 // --- modes ----------------------------------------------------------------------------------
-function openMode(m: Mode) {
+function openMode(m: Mode, hintFor: "goto" | "parent" = "goto") {
   ui.mode = m;
   ui.msg = "";
+  ui.hintFor = hintFor;
   if (m === "hints") {
     const branches = ui.zoom === "branches" ? branchTreeOrder().map(x => x.id)
       : [...new Set(ui.view!.rows.map(r => r.branch))];
@@ -439,19 +462,36 @@ function selection(): Set<number> {
   const [a, b] = [Math.min(ui.anchor, ui.cursor), Math.max(ui.anchor, ui.cursor)];
   return new Set(Array.from({ length: b - a + 1 }, (_, i) => a + i));
 }
-function retro(to: "tangent" | "newMain" | "main") {
+/** The selected rows as one continuous run of one branch's nodes, or an error message. */
+function selectedRun(): { branch: string; nodes: string[] } | string {
   const rows = [...selection()].map(i => ui.view!.rows[i]).filter((r): r is Extract<DisplayRow, { kind: "node" }> => r.kind === "node");
-  ui.mode = "normal";
-  ui.anchor = -1;
-  if (!rows.length) return render();
+  if (!rows.length) return "Select some nodes first.";
   const branch = rows[0].branch;
-  if (rows.some(r => r.branch !== branch)) return say("Select nodes from one branch only.", true);
+  if (rows.some(r => r.branch !== branch)) return "Select nodes from one branch only.";
   const order = tree().branches[branch].nodes;
   const idx = rows.map(r => order.indexOf(r.node)).sort((a, b) => a - b);
-  if (idx.some((v, i) => v !== idx[0] + i)) return say("Select a continuous run of nodes.", true);
-  if (to === "main" && tree().branches[branch].kind !== "tangent") return say("These are already on a main branch.", true);
-  act({ type: "retro", nodes: rows.map(r => r.node), to });
+  if (idx.some((v, i) => v !== idx[0] + i)) return "Select a continuous run of nodes.";
+  return { branch, nodes: rows.map(r => r.node) };
+}
+
+function retro(to: "tangent" | "newMain" | "main") {
+  const run = selectedRun();
+  ui.mode = "normal";
+  ui.anchor = -1;
+  if (typeof run === "string") { render(); return say(run, true); }
+  if (to === "main" && tree().branches[run.branch].kind !== "tangent") return say("These are already on a main branch.", true);
+  act({ type: "retro", nodes: run.nodes, to });
   say(to === "tangent" ? "Marked as a tangent." : to === "main" ? "Moved back to main." : "Marked as a new topic.");
+}
+
+/** v … p: the selected run becomes a tangent of a branch you pick by its label. */
+function pickParent() {
+  const run = selectedRun();
+  ui.anchor = -1;
+  if (typeof run === "string") { ui.mode = "normal"; render(); return say(run, true); }
+  ui.pickNodes = run.nodes;
+  openMode("hints", "parent");
+  say("Tangent of which branch? Type its label.");
 }
 
 function openNode(n?: TreeNode) {
@@ -464,7 +504,7 @@ function move(delta: number) {
   if (ui.zoom === "branches") { ui.listSel += delta; render(); return; }
   ui.cursor = Math.max(0, Math.min(ui.view!.rows.length - 1, ui.cursor + delta));
   const r = rowAt();
-  ui.cursorKey = r ? (r.kind === "node" ? r.node : `chip:${r.branch}`) : "";
+  ui.cursorKey = r ? rowKey(r) : "";
   render();
 }
 function scrollCursorIntoView() {
@@ -492,6 +532,12 @@ document.addEventListener("keydown", e => {
     if (k.length !== 1) return;
     ui.hintBuf += k;
     const hit = ui.hints.get(ui.hintBuf);
+    if (hit && ui.hintFor === "parent") {
+      ui.mode = "normal";
+      act({ type: "retro", nodes: ui.pickNodes, to: "tangent", parent: hit });
+      say(`Marked as a tangent of ${branchLabel(hit)}.`);
+      return;
+    }
     if (hit) { ui.mode = "normal"; goBranch(hit); return; }
     if (![...ui.hints.keys()].some(l => l.startsWith(ui.hintBuf))) { ui.mode = "normal"; say("No such label.", true); render(); }
     return;
@@ -500,8 +546,9 @@ document.addEventListener("keydown", e => {
     if (k === "j" || k === "ArrowDown") return move(1);
     if (k === "k" || k === "ArrowUp") return move(-1);
     if (k === "t") return retro("tangent");
-    if (k === "M") return retro("newMain");
+    if (k === "n" || k === "M") return retro("newMain");
     if (k === "m") return retro("main");
+    if (k === "p") return pickParent();
     return;
   }
   ui.msg = "";
@@ -514,13 +561,13 @@ document.addEventListener("keydown", e => {
     case "t": return act({ type: "tangent" });
     case "m": return act({ type: "main" });
     case "u": return act({ type: "up" });
-    case "M": return act({ type: "newMain" });
+    case "n": case "M": return act({ type: "newMain" });
     case "b": case "`": return back();
     case "o": if (e.ctrlKey) { e.preventDefault(); return back(); } return;
     case "f": return openMode("hints");
     case "/": e.preventDefault(); return openMode("find");
     case "r": return openMode("renameBranch");
-    case "R": return cursorNode() ? openMode("renameNode") : say("Put the cursor on a node first.", true);
+    case "e": case "R": return cursorNode() ? openMode("renameNode") : say("Put the cursor on a node first.", true);
     case "s": {
       const n = cursorNode();
       if (!n || n.pages.length < 2) return say("Nothing to split: this node has one page.", true);

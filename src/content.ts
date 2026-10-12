@@ -85,7 +85,7 @@ function arm() {
   toast?.remove();
   toast = document.createElement("div");
   toast.className = "toast";
-  toast.innerHTML = "Topic Tree &nbsp; <b>t</b> tangent · <b>u</b> up · <b>m</b> main · <b>M</b> new topic · <b>b</b> previous branch · <b>Esc</b>";
+  toast.innerHTML = "Topic Tree &nbsp; <b>t</b> tangent · <b>u</b> up · <b>m</b> main · <b>n</b> new topic · <b>b</b> previous branch · <b>Esc</b>";
   r.appendChild(toast);
   clearTimeout(armed);
   armed = window.setTimeout(disarm, 2500);

@@ -8,7 +8,9 @@ import type { Tree } from "../core/tree";
 
 export type DisplayRow =
   | { kind: "node"; node: string; branch: string; lane: number; colour: string; layoutRow: number }
-  | { kind: "chip"; branch: string; colour: string; count: number; lane: number };
+  | { kind: "chip"; branch: string; colour: string; count: number; lane: number }
+  | { kind: "pending"; branch: string; colour: string; lane: number; forkRow?: number; forkLane?: number;
+      branchKind: "main" | "tangent" };
 
 export interface View { rows: DisplayRow[]; layout: Layout; edges: Edge[]; yOf: (layoutRow: number) => number }
 
@@ -42,7 +44,7 @@ export function buildView(t: Tree, collapsed: Set<string>): View {
     visible.branches[id] = { ...visible.branches[id], nodes: [] };
   }
   const l = layout(visible);
-  const colourOf = new Map(layout(t).branches.map(b => [b.branch, b.colour]));
+  const colourOf = new Map(Object.entries(layout(t).colours));
   const total = (id: string): number => t.branches[id].nodes.length
     + Object.values(t.branches).filter(b => b.parentBranch === id).reduce((n, b) => n + total(b.id), 0);
 
@@ -66,6 +68,14 @@ export function buildView(t: Tree, collapsed: Set<string>): View {
     yIndex.set(r.row, rows.length);
     rows.push({ kind: "node", node: r.node, branch: r.branch, lane: r.lane, colour: r.colour, layoutRow: r.row });
     pushChips(r.node, r.lane);
+  }
+  // the branch you just started has no nodes yet: show where the next one will go
+  const cur = t.branches[t.current];
+  if (!cur.nodes.length) {
+    const fork = cur.forkNode ? l.rows.find(r => r.node === cur.forkNode) : undefined;
+    rows.push({ kind: "pending", branch: cur.id, colour: colourOf.get(cur.id) ?? "#78b6ff",
+                lane: cur.kind === "main" ? 0 : Math.max(1, l.lanes), branchKind: cur.kind,
+                forkRow: fork ? yIndex.get(fork.row) : undefined, forkLane: fork?.lane });
   }
   return { rows, layout: l, edges: l.edges, yOf: row => yIndex.get(row) ?? 0 };
 }
