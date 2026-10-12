@@ -295,7 +295,7 @@ function renderFooter() {
   }
   document.querySelector(".results")?.remove();
   const modeText: Partial<Record<Mode, string>> = {
-    visual: "<b>VISUAL</b> j/k extend · <kbd>t</kbd> make tangent · <kbd>M</kbd> make new topic · <kbd>Esc</kbd>",
+    visual: "<b>VISUAL</b> j/k extend · <kbd>t</kbd> tangent · <kbd>m</kbd> back to main · <kbd>M</kbd> new topic · <kbd>Esc</kbd>",
     hints: "Type the label of a branch · <kbd>Esc</kbd>",
   };
   f.replaceChildren(h("span", {
@@ -354,7 +354,7 @@ function overlay() {
         k("b", "previous branch"), k("f", "jump to a branch by label"), k("/", "find branch or node"),
         k("j k", "move"), k("g G", "top / bottom"), k("h l", "collapse / expand"),
         k("r", "name branch"), k("R", "name node"), k("s", "split last page into its own node"),
-        k("v", "select past nodes → t / M"), k("z", "branch view"), k("Enter", "open page"),
+        k("v", "select past nodes → t / m / M"), k("z", "branch view"), k("Enter", "open page"),
         k("Ctrl+Shift+Y", "from any page: then t u m M b")),
       h("div", { class: "actions", style: "margin-top:12px" },
         h("button", { class: "btn", onclick: () => bridge.openGuide() }, "Full guide"),
@@ -439,7 +439,7 @@ function selection(): Set<number> {
   const [a, b] = [Math.min(ui.anchor, ui.cursor), Math.max(ui.anchor, ui.cursor)];
   return new Set(Array.from({ length: b - a + 1 }, (_, i) => a + i));
 }
-function retro(to: "tangent" | "newMain") {
+function retro(to: "tangent" | "newMain" | "main") {
   const rows = [...selection()].map(i => ui.view!.rows[i]).filter((r): r is Extract<DisplayRow, { kind: "node" }> => r.kind === "node");
   ui.mode = "normal";
   ui.anchor = -1;
@@ -449,8 +449,9 @@ function retro(to: "tangent" | "newMain") {
   const order = tree().branches[branch].nodes;
   const idx = rows.map(r => order.indexOf(r.node)).sort((a, b) => a - b);
   if (idx.some((v, i) => v !== idx[0] + i)) return say("Select a continuous run of nodes.", true);
+  if (to === "main" && tree().branches[branch].kind !== "tangent") return say("These are already on a main branch.", true);
   act({ type: "retro", nodes: rows.map(r => r.node), to });
-  say(to === "tangent" ? "Marked as a tangent." : "Marked as a new topic.");
+  say(to === "tangent" ? "Marked as a tangent." : to === "main" ? "Moved back to main." : "Marked as a new topic.");
 }
 
 function openNode(n?: TreeNode) {
@@ -500,6 +501,7 @@ document.addEventListener("keydown", e => {
     if (k === "k" || k === "ArrowUp") return move(-1);
     if (k === "t") return retro("tangent");
     if (k === "M") return retro("newMain");
+    if (k === "m") return retro("main");
     return;
   }
   ui.msg = "";

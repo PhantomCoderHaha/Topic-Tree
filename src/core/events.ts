@@ -46,6 +46,6 @@ export type Action =
   | { type: "renameBranch"; branch: string; name: string }
   | { type: "renameNode"; node: string; name: string }
   | { type: "split"; node: string; page: number }         // pages[page..] become their own node
-  | { type: "retro"; nodes: string[]; to: "tangent" | "newMain" }; // re-mark past nodes
+  | { type: "retro"; nodes: string[]; to: "tangent" | "newMain" | "main" }; // re-mark past nodes ("main": undo a tangent mark)
 
 export type TopicEvent = SearchEvent | PageEvent | ActionEvent;

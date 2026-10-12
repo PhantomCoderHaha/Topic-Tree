@@ -197,12 +197,13 @@ function split(t: Tree, nodeId: string, page: number) {
 
 /** Re-mark a contiguous run of one branch's nodes as a tangent (it forked off the
  *  node before the run) or as a new main branch (a topic shift). */
-function retro(t: Tree, ids: string[], to: "tangent" | "newMain", ts: number) {
+function retro(t: Tree, ids: string[], to: "tangent" | "newMain" | "main", ts: number) {
   if (!ids.length || !t.nodes[ids[0]]) return;
   const from = t.branches[t.nodes[ids[0]].branch];
   const idx = ids.map(id => from.nodes.indexOf(id)).sort((x, y) => x - y);
   const contiguous = idx[0] >= 0 && idx.every((v, i) => v === idx[0] + i);
   if (!contiguous) return;
+  if (to === "main") return backToMain(t, from.id, from.nodes.slice(idx[0], idx[0] + ids.length));
   const run = from.nodes.slice(idx[0], idx[0] + ids.length);
   const isTail = idx[0] + ids.length === from.nodes.length;
 
@@ -219,6 +220,26 @@ function retro(t: Tree, ids: string[], to: "tangent" | "newMain", ts: number) {
     if (other.kind === "tangent" && other.forkNode && run.includes(other.forkNode)) other.parentBranch = b.id;
   // still working at the end of the run: carry on in the re-marked branch
   if (isTail && t.current === from.id) goTo(t, b.id);
+}
+
+/** Undo a tangent mark: move a run of a tangent's nodes back onto its main branch, in
+ *  time order. A tangent left empty is removed; tangents that forked off a moved node
+ *  now hang off the main branch. */
+function backToMain(t: Tree, fromId: string, run: string[]) {
+  const from = t.branches[fromId];
+  if (from.kind !== "tangent") return;
+  const main = t.branches[mainOf(t, fromId)];
+  from.nodes = from.nodes.filter(id => !run.includes(id));
+  for (const id of run) t.nodes[id].branch = main.id;
+  main.nodes = [...main.nodes, ...run].sort((a, b) => t.nodes[a].ts - t.nodes[b].ts || (a < b ? -1 : 1));
+  for (const b of Object.values(t.branches))
+    if (b.kind === "tangent" && b.forkNode && run.includes(b.forkNode)) b.parentBranch = main.id;
+  if (!from.nodes.length) {
+    for (const b of Object.values(t.branches)) if (b.parentBranch === fromId) b.parentBranch = from.parentBranch;
+    delete t.branches[fromId];
+    t.history = t.history.filter(b => b !== fromId);
+    if (t.current === fromId) t.current = main.id;
+  }
 }
 
 /** Drift = how far the person is into the current tangent. */

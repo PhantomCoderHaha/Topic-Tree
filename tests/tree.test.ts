@@ -171,3 +171,26 @@ describe("up one level", () => {
     expect(t.current).toBe(t.mains[0]);
   });
 });
+
+describe("retro back to main", () => {
+  it("moves selected tangent nodes back onto main in time order and keeps the rest of the tangent", () => {
+    const t = run("q:a", { type: "tangent" }, "q:b", "q:c", { type: "main" }, "q:d",
+                  { type: "retro", nodes: ["ne3"], to: "main" });
+    expect(titles(t, t.mains[0])).toEqual(["a", "b", "d"]);
+    const tan = Object.values(t.branches).find(b => b.kind === "tangent")!;
+    expect(titles(t, tan.id)).toEqual(["c"]);
+  });
+  it("removes a tangent left empty and moves you to main if you were in it", () => {
+    const t = run("q:a", { type: "tangent" }, "q:b", "q:c", { type: "retro", nodes: ["ne3", "ne4"], to: "main" });
+    expect(Object.values(t.branches).some(b => b.kind === "tangent")).toBe(false);
+    expect(t.current).toBe(t.mains[0]);
+    expect(titles(t, t.mains[0])).toEqual(["a", "b", "c"]);
+  });
+  it("re-parents a sub-tangent that forked off a moved node, and ignores nodes already on main", () => {
+    const t = run("q:a", { type: "tangent" }, "q:b", { type: "tangent" }, "q:c", { type: "main" },
+                  { type: "retro", nodes: ["ne3"], to: "main" }, { type: "retro", nodes: ["ne1"], to: "main" });
+    const sub = Object.values(t.branches).find(b => b.kind === "tangent")!;
+    expect(sub.parentBranch).toBe(t.mains[0]);
+    expect(titles(t, t.mains[0])).toEqual(["a", "b"]);
+  });
+});
