@@ -42,6 +42,21 @@
   .mock-row.here { border-left-color: var(--accent); }
   .mock-row .dim { color: var(--dim); }
   .mock-row .topic { font-size: 10.5px; color: var(--dim); border: 1px solid var(--line); padding: 0 5px; border-radius: 9px; }
+  .mock-row .pending { font-style: italic; }
+  .scene { outline: none; }
+  .scene:focus-visible .mock { border-color: var(--accent); }
+  .scene .say { min-height: 72px; }
+  .scene-stage { display: flex; flex-direction: column; gap: 10px; }
+  .mock { min-height: 120px; }
+  .controls { display: flex; align-items: center; gap: 10px; justify-content: center; }
+  .controls .nav { width: 34px; height: 30px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg2);
+                   color: var(--fg); font-size: 18px; line-height: 1; cursor: pointer; }
+  .controls .nav:hover:not(:disabled) { border-color: var(--accent); }
+  .controls .nav:disabled { opacity: .3; cursor: default; }
+  .controls .dots { display: flex; gap: 6px; }
+  .controls .dot { width: 9px; height: 9px; border-radius: 50%; border: 0; padding: 0; background: #3a3a3a; cursor: pointer; }
+  .controls .dot.on { background: var(--accent); }
+  .controls .step { color: var(--dim); font-size: 12.5px; min-width: 38px; text-align: center; }
 </style>
 </head>
 <body>
@@ -59,7 +74,7 @@
   </ol>
 
   <h2>A worked example</h2>
-  <p class="dim">One research session, step by step. The right side is exactly what the panel shows; <span style="background:rgba(120,182,255,.12);padding:0 4px;border-radius:3px">tinted rows</span> are new in that step, and the blue edge marks where you are.</p>
+  <p class="dim">One research session in seven scenarios. Step through each with <b>‹ ›</b> (or click it and use <kbd>←</kbd> <kbd>→</kbd>). The right side is exactly what the panel shows: <span style="background:rgba(120,182,255,.12);padding:0 4px;border-radius:3px">tinted rows</span> changed in that step, and the blue edge marks where you are.</p>
   <div id="example"></div>
 
   <h2>Without leaving the page</h2>
@@ -104,10 +119,21 @@
     <tr><td>Lane on the right</td><td>A tangent; the dashed line shows where you came back</td></tr>
     <tr><td>↳ line</td><td>A finished tangent, folded. Click it to unfold.</td></tr>
     <tr><td>Glowing dot</td><td>Where you are now</td></tr>
+    <tr><td>Dashed ring</td><td>A branch you just started (<kbd>t</kbd> or <kbd>n</kbd>): your next search or page goes there. Leave it unused and it disappears.</td></tr>
   </table>
 
   <h2>The drift alarm</h2>
   <p>When a tangent reaches a number of steps or minutes (set in <span class="ctl">⚙</span>), a banner asks if you want to return to your main topic. <b>Return</b> takes you back; <b>Keep going</b> hides it for this tangent.</p>
+
+  <h2>History</h2>
+  <p><span class="ctl">☰</span> → <b>Manage history…</b> opens every past session, grouped by day. Works fully with the mouse:</p>
+  <table>
+    <tr><td>Click a session</td><td>Select it (Shift-click selects a range; <b>Select all</b> / <b>Clear</b> at the top)</td></tr>
+    <tr><td><b>Open</b></td><td>Continue that session's tree in this window (double-click works too)</td></tr>
+    <tr><td><b>Delete</b> / <b>Delete selected</b></td><td>Removes the session from Topic Tree <b>and</b> its saved files. Always asks first; can't be undone.</td></tr>
+    <tr><td>Search box</td><td>Filter by name</td></tr>
+  </table>
+  <p class="dim">Keyboard: <kbd>/</kbd> search · <kbd>j</kbd> <kbd>k</kbd> move · <kbd>x</kbd> select · <kbd>Enter</kbd> open · <kbd>Delete</kbd> delete.</p>
 
   <h2>Where your data goes</h2>
   <p>Only on this computer. Each session is saved to <code>%LOCALAPPDATA%\TopicTree\sessions\</code> as <code>&lt;session&gt;.jsonl</code> (every event) and <code>&lt;session&gt;.tree.json</code> (the tree), so you can analyse it later. Nothing is sent anywhere.</p>
