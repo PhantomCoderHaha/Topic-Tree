@@ -119,9 +119,23 @@ function addPage(t: Tree, e: PageEvent) {
 // --- actions ------------------------------------------------------------------------
 function goTo(t: Tree, branch: string) {
   if (branch === t.current || !t.branches[branch]) return;
-  t.history = [...t.history.filter(b => b !== t.current), t.current];
+  const leaving = t.current;
+  t.history = [...t.history.filter(b => b !== leaving), leaving];
   t.current = branch;
   t.lastNode = undefined; // a jump never merges the next page into an old node
+  pruneIfEmpty(t, leaving);
+}
+
+/** A branch you started but never added a node to is not kept once you leave it:
+ *  "new topic" then "back" is an undo, not an empty topic in the tree. */
+function pruneIfEmpty(t: Tree, id: string) {
+  const b = t.branches[id];
+  if (!b || b.nodes.length || id === t.current) return;
+  if (Object.values(t.branches).some(o => o.parentBranch === id)) return; // something hangs off it
+  if (b.kind === "main" && t.mains.length === 1) return;                   // the session's only topic
+  delete t.branches[id];
+  t.mains = t.mains.filter(m => m !== id);
+  t.history = t.history.filter(h => h !== id);
 }
 
 export function mainOf(t: Tree, branch: string): string {
@@ -143,10 +157,20 @@ function newBranch(t: Tree, kind: Branch["kind"], ts: number, from?: string): Br
 
 function act(t: Tree, a: Action, ts: number) {
   switch (a.type) {
-    case "tangent":
+    case "tangent": {
+      const here = t.branches[t.current];
+      if (here.kind === "tangent" && !here.nodes.length) break; // already on a fresh tangent
       goTo(t, newBranch(t, "tangent", ts, t.current).id);
       break;
+    }
     case "main": {
+      const here = t.branches[t.current];
+      if (here.kind === "main" && !here.nodes.length) {
+        // an uncommitted new topic: "back to main" means the topic you came from
+        const prev = [...t.history].reverse().find(id => t.branches[id] && id !== here.id);
+        if (prev) goTo(t, mainOf(t, prev));
+        break;
+      }
       const main = mainOf(t, t.current);
       // every tangent on the way back up counts as returned
       for (let b = t.branches[t.current]; b.kind === "tangent" && b.parentBranch; b = t.branches[b.parentBranch])
@@ -161,9 +185,12 @@ function act(t: Tree, a: Action, ts: number) {
       goTo(t, b.parentBranch);
       break;
     }
-    case "newMain":
+    case "newMain": {
+      const here = t.branches[t.current];
+      if (here.kind === "main" && !here.nodes.length) break; // already on a fresh topic
       goTo(t, newBranch(t, "main", ts).id);
       break;
+    }
     case "goto":
       goTo(t, a.branch);
       break;

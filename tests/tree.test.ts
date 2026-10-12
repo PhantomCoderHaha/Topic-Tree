@@ -216,3 +216,34 @@ describe("retro tangent of a chosen parent", () => {
     expect(titles(after, after.mains[0])).toEqual(["a", "b"]);
   });
 });
+
+describe("uncommitted branches", () => {
+  it("new topic then m goes back to the old topic, and the empty topic disappears", () => {
+    const t = run("q:a", { type: "newMain" }, { type: "main" }, "q:b");
+    expect(t.mains).toHaveLength(1);
+    expect(titles(t, t.mains[0])).toEqual(["a", "b"]);
+  });
+  it("new topic from inside a tangent, then m, goes back to that tangent's topic", () => {
+    const t = run("q:a", { type: "tangent" }, "q:x", { type: "newMain" }, { type: "main" });
+    expect(t.current).toBe(t.mains[0]);
+    expect(t.mains).toHaveLength(1);
+  });
+  it("an empty tangent left with m (or b, f…) is discarded too", () => {
+    const t = run("q:a", { type: "tangent" }, { type: "main" }, "q:b");
+    expect(Object.values(t.branches).some(b => b.kind === "tangent")).toBe(false);
+  });
+  it("once it has a node it is committed: it stays, and becomes where you are", () => {
+    const t = run("q:a", { type: "newMain" }, "q:b", { type: "main" });
+    expect(t.mains).toHaveLength(2);
+    expect(t.current).toBe(t.mains[1]);
+  });
+  it("pressing new topic / tangent twice doesn't stack empty branches", () => {
+    const t = run("q:a", { type: "newMain" }, { type: "newMain" }, { type: "tangent" }, { type: "tangent" });
+    expect(t.mains).toHaveLength(2);
+    expect(Object.values(t.branches).filter(b => b.kind === "tangent")).toHaveLength(1);
+  });
+  it("the session's first, still-empty topic is kept", () => {
+    const t = run({ type: "tangent" }, "q:x", { type: "main" });
+    expect(t.mains).toHaveLength(1);
+  });
+});

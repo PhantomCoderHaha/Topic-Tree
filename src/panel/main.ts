@@ -72,13 +72,13 @@ function mainName(): string {
   const t = tree();
   let b = t.branches[t.current];
   while (b.kind === "tangent" && b.parentBranch) b = t.branches[b.parentBranch];
-  return b.name ?? (b.nodes[0] ? nodeLabel(t.nodes[b.nodes[0]]) : "New session");
+  return b.name ?? (b.nodes[0] ? nodeLabel(t.nodes[b.nodes[0]]) : t.mains.length > 1 ? "New topic" : "New session");
 }
 
 // --- actions ------------------------------------------------------------------------------
 const DONE: Partial<Record<Action["type"], string>> = {
   tangent: "Tangent started: your next page goes on it.",
-  newMain: "New topic started: your next search goes on it.",
+  newMain: "New topic started: your next search goes on it (m to go back).",
   main: "Back on the main branch.",
   up: "Up one level.",
 };
@@ -220,9 +220,10 @@ function body() {
                                "stroke-dasharray": "3 3", opacity: 0.7 }));
       }
       g.append(svg("circle", { cx: x, cy: y, r: 5, fill: "var(--bg)", stroke: r.colour, "stroke-width": 2, "stroke-dasharray": "3 2" }));
-      row = h("div", { class: "row pending", style: `padding-left:${gutter}px` },
+      row = h("div", { class: `row pending ${r.branchKind}`, style: `padding-left:${gutter}px` },
+        r.branchKind === "main" && h("span", { class: "topic" }, "new topic"),
         h("span", { class: "label", style: `color:${r.colour}` },
-          r.branchKind === "main" ? "New topic: your next search goes here" : "Tangent started: your next page goes here"));
+          r.branchKind === "main" ? "your next search goes here · m to go back" : "Tangent started: your next page goes here"));
     } else if (r.kind === "chip") {
       g.append(svg("circle", { cx: x, cy: y, r: 3.5, fill: "var(--bg)", stroke: r.colour, "stroke-width": 1.5,
                                "stroke-dasharray": "2 2" }));
