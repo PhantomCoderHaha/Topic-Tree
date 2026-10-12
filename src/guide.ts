@@ -27,12 +27,18 @@ const SCENES: Scene[] = [
     { say: "You open a result. Pages are dots.", steps: ["p:sleepfoundation.org|Healthy Sleep Tips"] },
     { say: "You read another article on the same site. It joins the same node (<b>×2</b>), so one site doesn't flood the tree.",
       steps: ["p:sleepfoundation.org|Sleep Hygiene"] },
+    { say: "Name the branch so you know what it's about at a glance. Click a row on it (or move there with <kbd>j</kbd>/<kbd>k</kbd>), press <kbd>r</kbd>, type a name, <kbd>Enter</kbd>. The name shows as a tag and in the header.",
+      keys: "<kbd>r</kbd>, type <i>sleep</i>, <kbd>Enter</kbd>",
+      steps: [{ type: "renameBranch", branch: "b-main-0", name: "sleep" }] },
   ] },
   { title: "2. A side question: start a tangent", frames: [
     { say: "An article mentions <i>circadian rhythm</i>. Before you search it, start a <b>tangent</b>. A dashed ring shows where it will go.",
-      keys: "<kbd>t</kbd> &nbsp;(on a page: <kbd>Ctrl+Shift+Y</kbd> <kbd>t</kbd>)", steps: [{ type: "tangent" }] },
+      keys: "<kbd>t</kbd> &nbsp;(on a page: <kbd>Ctrl+Shift+Y</kbd> <kbd>t</kbd>)", steps: [{ type: "tangent", label: "circadian" }] },
     { say: "Your search lands on the tangent, in its own lane and colour.", steps: ["q:what is circadian rhythm"] },
     { say: "So does the page you read.", steps: ["p:en.wikipedia.org|Circadian rhythm - Wikipedia"] },
+    { say: "Tangents can be named too: same key, <kbd>r</kbd>, with the cursor on the tangent. Its folded line will show the name later.",
+      keys: "<kbd>r</kbd>, type <i>circadian rhythm</i>, <kbd>Enter</kbd>",
+      steps: [{ type: "renameBranch", branch: "#circadian", name: "circadian rhythm" }] },
   ] },
   { title: "3. Back to the main question", frames: [
     { say: "Got it. Return to main. The finished tangent folds into one <b>↳</b> line (click it to unfold).",
@@ -95,7 +101,9 @@ function treeAt(scene: number, frame: number): Tree {
       if (typeof s !== "string") {
         const { label, ...action } = s;
         if (label) byLabel.set(label, `b-tan-${base.id}`);
-        const a: Action = action.type === "retro"
+        const a: Action = action.type === "renameBranch" && action.branch.startsWith("#")
+          ? { ...action, branch: byLabel.get(action.branch.slice(1)) ?? action.branch }
+          : action.type === "retro"
           ? { ...action, nodes: action.nodes.map(n => byTitle.get(n.slice(1)) ?? n),
               ...(action.parent && { parent: byLabel.get(action.parent.slice(1)) ?? action.parent }) }
           : action;
@@ -139,6 +147,7 @@ function svgEl(tag: string, attrs: Record<string, string | number>) {
 function branchTitle(t: Tree, id: string): string {
   const b = t.branches[id];
   const first = b?.nodes[0] ? t.nodes[b.nodes[0]].title : "";
+  if (b?.name) return b.name;
   return b?.kind === "tangent" ? `tangent: ${first}` : first;
 }
 
@@ -157,7 +166,7 @@ function panel(t: Tree, frame: Frame, previous: Map<string, string>): HTMLElemen
   let main = cur;
   while (main.kind === "tangent" && main.parentBranch) main = t.branches[main.parentBranch];
   const head = el("div", "mock-head");
-  head.append(el("span", "rec"), el("strong", "", main.nodes[0] ? t.nodes[main.nodes[0]].title : "New topic"));
+  head.append(el("span", "rec"), el("strong", "", main.name ?? (main.nodes[0] ? t.nodes[main.nodes[0]].title : "New topic")));
   if (cur.kind === "tangent") head.append(el("span", "sub", `› ${cur.nodes.length ? branchTitle(t, cur.id) : "new tangent"}`));
   box.append(head);
   if (frame.drift) box.append(el("div", "mock-drift", `5 steps · 22 min into this tangent. Back to ${branchTitle(t, main.id)}?   [Return (m)]  [Keep going]`));
@@ -201,7 +210,11 @@ function panel(t: Tree, frame: Frame, previous: Map<string, string>): HTMLElemen
         ? svgEl("circle", { cx: x, cy: y, r: 4.5, fill: "#151515", stroke: r.colour, "stroke-width": 2 })
         : svgEl("circle", { cx: x, cy: y, r: 4.5, fill: r.colour }));
       const b = Object.values(t.branches).find(b => b.nodes[0] === r.node);
-      if (b && b.kind === "main" && t.mains.indexOf(b.id) > 0) row.append(el("span", "topic", "new topic"));
+      if (b?.name) {
+        const tag = el("span", "tag", b.name);
+        tag.style.background = r.colour;
+        row.append(tag);
+      } else if (b && b.kind === "main" && t.mains.indexOf(b.id) > 0) row.append(el("span", "topic", "new topic"));
       row.append(el("span", "", n.kind === "search" ? `“${n.title}”` : n.title));
       if (n.pages.length > 1) row.append(el("span", "dim", ` ×${n.pages.length}`));
       if (n.site) row.append(el("span", "dim", ` ${n.site}`));
