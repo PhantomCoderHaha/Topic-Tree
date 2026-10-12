@@ -287,6 +287,14 @@ async function handle(msg: Msg, sender: chrome.runtime.MessageSender): Promise<u
     case "settings":
       await local.set({ settings: msg.settings });
       return true;
+    case "history": {
+      const all = await sess.get(null);
+      const activeIds = Object.entries(all).filter(([k]) => k.startsWith("win:")).map(([, v]) => (v as WinState).session);
+      return { sessions: await sessions(), active: activeIds };
+    }
+    case "deleteSessions":
+      await deleteSessions(msg.ids);
+      return true;
     case "leaderKey": {
       if (windowId === undefined) return false;
       const a = LEADER_KEYS[msg.key];
@@ -333,6 +341,24 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
   return true;
 });
 
+// --- history: deleting sessions ------------------------------------------------------
+/** Removes sessions everywhere: extension storage, in-memory caches and (through the
+ *  native host) their files on disk. A window using one starts a fresh session. */
+async function deleteSessions(ids: string[]) {
+  const gone = new Set(ids);
+  await local.set({ sessions: (await sessions()).filter(s => !gone.has(s.id)) });
+  await local.remove(ids.flatMap(id => [`log:${id}`, `flushed:${id}`]));
+  for (const id of ids) { logs.delete(id); trees.delete(id); host.remove(id); }
+  for (const [k, v] of Object.entries(await sess.get(null))) {
+    if (!k.startsWith("win:") || !gone.has((v as WinState).session)) continue;
+    const windowId = Number(k.slice(4));
+    const fresh = newSessionId();
+    await indexSession(fresh);
+    await setWin(windowId, { session: fresh, alertedBranch: undefined });
+    await broadcast(windowId);
+  }
+}
+
 // --- badge -------------------------------------------------------------------------
 async function badge(windowId: number, state?: WinState) {
   const s = state ?? (await win(windowId));
@@ -360,8 +386,8 @@ const host = {
       this.port = chrome.runtime.connectNative(HOST);
     } catch { this.ok = false; return; }
     this.ok = true;
-    this.port.onMessage.addListener(async (m: { session: string; seq: number }) => {
-      if (m?.session) await local.set({ [`flushed:${m.session}`]: m.seq });
+    this.port.onMessage.addListener(async (m: { session?: string; seq?: number }) => {
+      if (m?.session && typeof m.seq === "number") await local.set({ [`flushed:${m.session}`]: m.seq });
     });
     this.port.onDisconnect.addListener(() => {
       this.ok = false;
@@ -370,11 +396,19 @@ const host = {
     });
     void this.flushBacklog();
   },
+  remove(session: string) {
+    if (this.port) { try { this.port.postMessage({ type: "delete", session }); return; } catch { this.ok = false; } }
+    void local.get("pendingDeletes").then(r =>
+      local.set({ pendingDeletes: [...new Set([...(r.pendingDeletes ?? []), session])] }));
+  },
   send(event: TopicEvent, t: Tree) {
     if (!this.port) return;
     try { this.port.postMessage({ type: "event", event, tree: t }); } catch { this.ok = false; }
   },
   async flushBacklog() {
+    const pendingDeletes: string[] = (await local.get("pendingDeletes")).pendingDeletes ?? [];
+    for (const s of pendingDeletes) this.port?.postMessage({ type: "delete", session: s });
+    if (pendingDeletes.length) await local.remove("pendingDeletes");
     for (const s of await sessions()) {
       const done = (await local.get(`flushed:${s.id}`))[`flushed:${s.id}`] ?? 0;
       const events = (await log(s.id)).filter(e => e.seq > done);

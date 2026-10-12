@@ -13,6 +13,7 @@ export interface Bridge {
   send(msg: Msg): Promise<void>;
   canFloat(): Promise<boolean>;
   openGuide(): void;
+  openHistory(): void;
   /** Must be called directly in a click handler: opening the side panel needs the gesture. */
   dock(): void;
   open(url: string): void;
@@ -40,6 +41,7 @@ export function extensionBridge(mode: "docked" | "float"): Bridge {
     },
     canFloat() { return chrome.runtime.sendMessage({ t: "canFloat?", windowId } satisfies Msg); },
     openGuide() { void chrome.tabs.create({ url: chrome.runtime.getURL("guide.html"), windowId }); },
+    openHistory() { void chrome.tabs.create({ url: chrome.runtime.getURL("history.html"), windowId }); },
     dock() {
       if (windowId !== undefined) void chrome.sidePanel.open({ windowId });
     },
@@ -113,6 +115,7 @@ export function previewBridge(): Bridge {
     },
     async canFloat() { return true; },
     openGuide() { window.open("guide.html"); },
+    openHistory() { window.open("history.html"); },
     dock() { panel = "docked"; },
     open(url) { console.log("open", url); },
     closeSelf() { console.log("close panel"); },

@@ -367,6 +367,7 @@ function overlay() {
       }, h("span", {}, x.id === s.state.session ? `● ${x.title}` : x.title),
          h("span", { class: "meta" }, `${x.nodes} · ${new Date(x.started).toLocaleDateString()}`)))),
       h("div", { class: "actions" }, h("button", { class: "btn", onclick: close }, "Close"),
+        h("button", { class: "btn", onclick: () => { bridge.openHistory(); close(); } }, "Manage history…"),
         h("button", { class: "btn primary blue", onclick: () => { send({ t: "newSession" }); close(); } }, "New session"))));
   }
   if (ui.mode === "help") {

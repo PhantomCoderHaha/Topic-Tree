@@ -58,7 +58,22 @@ def seq_on_disk(session: str) -> int:
     return last_seq[session]
 
 
+def delete(session: str) -> dict:
+    """Remove a session's files. Names are sanitised, so this only ever touches SESSIONS."""
+    name = safe(session)
+    removed = 0
+    for suffix in (".jsonl", ".tree.json"):
+        path = SESSIONS / f"{name}{suffix}"
+        if path.exists():
+            path.unlink()
+            removed += 1
+    last_seq.pop(name, None)
+    return {"deleted": session, "files": removed}
+
+
 def handle(msg: dict) -> dict | None:
+    if msg.get("type") == "delete":
+        return delete(msg["session"])
     if msg.get("type") != "event":
         return None
     event, tree = msg["event"], msg.get("tree")

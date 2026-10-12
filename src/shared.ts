@@ -39,7 +39,9 @@ export type Msg =
   | { t: "leaderKey"; key: string }
   | { t: "card?" }
   | { t: "canFloat?"; windowId?: number }
-  | { t: "open"; windowId?: number; url: string };
+  | { t: "open"; windowId?: number; url: string }
+  | { t: "history" }
+  | { t: "deleteSessions"; ids: string[] };
 
 /** Background -> content script */
 export type TabMsg = { t: "card"; show: boolean } | { t: "arm" } | { t: "ping" };
